@@ -13,11 +13,20 @@
 <body>
 <header class="encabezado">
   <div class="encabezado-contenido">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M2 5.5C2 5.5 5 4 8.5 4.5C10 4.7 11.3 5.3 12 6V19.5C11.3 18.8 10 18.2 8.5 18C5 17.5 2 19 2 19V5.5Z"/>
-      <path d="M22 5.5C22 5.5 19 4 15.5 4.5C14 4.7 12.7 5.3 12 6V19.5C12.7 18.8 14 18.2 15.5 18C19 17.5 22 19 22 19V5.5Z"/>
-    </svg>
-    <h1>Biblin</h1>
+    <!-- Agrupamos el logo y el título -->
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 5.5C2 5.5 5 4 8.5 4.5C10 4.7 11.3 5.3 12 6V19.5C11.3 18.8 10 18.2 8.5 18C5 17.5 2 19 2 19V5.5Z"/>
+        <path d="M22 5.5C22 5.5 19 4 15.5 4.5C14 4.7 12.7 5.3 12 6V19.5C12.7 18.8 14 18.2 15.5 18C19 17.5 22 19 22 19V5.5Z"/>
+      </svg>
+      <h1>Biblin</h1>
+    </div>
+    
+    <!-- Movemos la barra de sesión aquí -->
+    <div id="barra-sesion" class="barra-sesion oculta">
+      <span id="texto-sesion"></span>
+      <button type="button" id="btn-cerrar-sesion" class="boton-sesion-secundario">Cerrar sesión</button>
+    </div>
   </div>
 </header>
 <main>
@@ -38,7 +47,7 @@
         <span>Solo lector</span>
       </button>
 
-      <button type="button" class="boton-grande boton-agregar" id="btn-ir-login" style="margin-top: 10px;">
+      <button type="button" class="boton-grande boton-agregar" id="btn-ir-login">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/>
           <polyline points="10 8 14 12 10 16"/>

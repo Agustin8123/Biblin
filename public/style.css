@@ -53,24 +53,34 @@ input:focus-visible {
 .encabezado {
   background: var(--verde);
   color: var(--papel);
-  padding: 24px 20px;
+  padding: 20px 20px; /* Reducido un poco para mejor balance */
 }
+
 .encabezado-contenido {
   max-width: 640px;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: space-between; /* Empuja el logo a la izq y sesión a la der */
+  gap: 16px;
 }
 .encabezado svg {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
 }
+
 .encabezado h1 {
   margin: 0;
-  font-size: 27px;
+  font-size: 25px;
   font-weight: 700;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 /* ---------- Layout general ---------- */
@@ -93,9 +103,16 @@ main {
 #pantalla-inicio {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 15px; /* Cambiado a 15px como pediste */
   margin-top: 10px;
 }
+
+.inicio-publico {
+  display: flex;
+  flex-direction: column;
+  gap: 15px; /* Separación de 15px entre los botones grandes */
+}
+
 
 .boton-grande {
   display: flex;
@@ -379,7 +396,51 @@ main {
 }
 
 /* ---------- Pantallas chicas ---------- */
+@media (max-width: 480px) {
+  .encabezado-contenido {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .barra-sesion {
+    width: 100%;
+    justify-content: space-between; /* Separa el texto y el botón en móvil */
+  }
+  
+  #texto-sesion {
+    font-size: 14px; /* Texto un poco más chico en móvil */
+  }
+}
+
 @media (max-width: 380px) {
   .boton-grande { font-size: 22px; padding: 26px 20px; }
   .encabezado h1 { font-size: 23px; }
+}
+
+
+.barra-sesion {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--papel);
+  font-size: 15px;
+}
+
+.boton-sesion-secundario {
+  background: transparent;
+  color: var(--papel);
+  border: 2px solid var(--papel);
+  padding: 6px 14px;
+  border-radius: var(--radio);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  white-space: nowrap; /* Evita que el texto del botón se rompa */
+}
+
+.boton-sesion-secundario:hover {
+  background: var(--papel);
+  color: var(--verde);
 }
