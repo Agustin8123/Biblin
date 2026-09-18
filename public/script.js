@@ -1,4 +1,3 @@
-// Íconos reutilizados en mensajes y botones (mismo estilo que en index.html)
 const ICONO_EXITO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><polyline points="7.5 12.5 10.5 15.5 16.5 9"/></svg>';
 const ICONO_ERROR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><line x1="12" y1="7.5" x2="12" y2="13"/><circle cx="12" cy="16.5" r="0.75" fill="currentColor" stroke="none"/></svg>';
 const ICONO_BASURA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>';
@@ -7,9 +6,17 @@ const ICONO_SUBIR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 
 const pantallas = {
   inicio: document.getElementById('pantalla-inicio'),
+  login: document.getElementById('pantalla-login'),
   agregar: document.getElementById('pantalla-agregar'),
   buscar: document.getElementById('pantalla-buscar'),
 };
+
+let sesion = {
+  autenticado: false,
+  usuario: null,
+};
+
+let modoLector = true;
 
 function mostrarPantalla(nombre) {
   Object.values(pantallas).forEach((p) => p.classList.add('oculta'));
@@ -17,21 +24,152 @@ function mostrarPantalla(nombre) {
   window.scrollTo(0, 0);
 }
 
-document.getElementById('btn-ir-agregar').addEventListener('click', () => {
-  mostrarPantalla('agregar');
-  prepararFormularioAgregar();
-});
+function mostrarMensaje(elemento, tipo, texto) {
+  elemento.innerHTML = '';
+  const icono = document.createElement('span');
+  icono.className = 'icono-mensaje';
+  icono.innerHTML = tipo === 'exito' ? ICONO_EXITO : ICONO_ERROR;
 
-document.getElementById('btn-ir-buscar').addEventListener('click', () => {
+  const span = document.createElement('span');
+  span.textContent = texto;
+
+  elemento.appendChild(icono);
+  elemento.appendChild(span);
+  elemento.className = `mensaje ${tipo}`;
+}
+
+function ocultarMensaje(elemento) {
+  elemento.className = 'mensaje oculta';
+  elemento.innerHTML = '';
+}
+
+async function actualizarEstadoSesion() {
+  try {
+    const respuesta = await fetch('/api/auth/estado', { cache: 'no-store' });
+    const datos = await respuesta.json();
+    sesion = {
+      autenticado: Boolean(datos.autenticado),
+      usuario: datos.usuario || null,
+    };
+  } catch (error) {
+    sesion = { autenticado: false, usuario: null };
+  }
+  actualizarInicio();
+}
+
+function actualizarInicio() {
+  const inicioPublico = document.getElementById('inicio-publico');
+  const inicioAdmin = document.getElementById('inicio-admin');
+  const barraSesion = document.getElementById('barra-sesion');
+  const textoSesion = document.getElementById('texto-sesion');
+
+  if (sesion.autenticado) {
+    inicioPublico.classList.add('oculta');
+    inicioAdmin.classList.remove('oculta');
+    barraSesion.classList.remove('oculta');
+    textoSesion.textContent = `Sesión iniciada como ${sesion.usuario}`;
+  } else {
+    inicioPublico.classList.remove('oculta');
+    inicioAdmin.classList.add('oculta');
+    barraSesion.classList.add('oculta');
+    textoSesion.textContent = '';
+  }
+}
+
+function irABuscar(lector = !sesion.autenticado) {
+  modoLector = lector && !sesion.autenticado;
+  document.getElementById('indicador-lector').classList.toggle('oculta', !modoLector);
   mostrarPantalla('buscar');
   campoBusqueda.value = '';
   buscarLibros('');
   campoBusqueda.focus();
+}
+
+// =====================================================================
+// INICIO / SESIÓN
+// =====================================================================
+
+document.getElementById('btn-solo-lector').addEventListener('click', () => irABuscar(true));
+
+document.getElementById('btn-ir-login').addEventListener('click', () => {
+  mostrarPantalla('login');
+  ocultarMensaje(mensajeLogin);
+  campoUsuario.focus();
 });
 
-document.querySelectorAll('[data-volver]').forEach((boton) => {
-  boton.addEventListener('click', () => mostrarPantalla('inicio'));
+document.getElementById('btn-ir-agregar').addEventListener('click', () => {
+  if (!sesion.autenticado) {
+    mostrarPantalla('login');
+    campoUsuario.focus();
+    return;
+  }
+  modoLector = false;
+  mostrarPantalla('agregar');
+  prepararFormularioAgregar();
 });
+
+document.getElementById('btn-ir-buscar-admin').addEventListener('click', () => irABuscar(false));
+
+document.getElementById('btn-cerrar-sesion').addEventListener('click', cerrarSesion);
+
+document.querySelectorAll('[data-volver]').forEach((boton) => {
+  boton.addEventListener('click', () => {
+    mostrarPantalla(boton.dataset.volver || 'inicio');
+    if ((boton.dataset.volver || 'inicio') === 'inicio') actualizarInicio();
+  });
+});
+
+const formLogin = document.getElementById('form-login');
+const mensajeLogin = document.getElementById('mensaje-login');
+const campoUsuario = document.getElementById('campo-usuario');
+const campoClave = document.getElementById('campo-clave');
+const botonLogin = formLogin.querySelector('button[type="submit"]');
+
+formLogin.addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  if (!formLogin.reportValidity()) return;
+
+  botonLogin.disabled = true;
+  botonLogin.textContent = 'Entrando…';
+  ocultarMensaje(mensajeLogin);
+
+  try {
+    const respuesta = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario: campoUsuario.value.trim(), clave: campoClave.value }),
+    });
+    const datos = await respuesta.json();
+
+    if (!respuesta.ok || !datos.ok) {
+      mostrarMensaje(mensajeLogin, 'error', datos.error || 'Usuario o contraseña incorrectos.');
+      return;
+    }
+
+    campoClave.value = '';
+    sesion = { autenticado: true, usuario: datos.usuario };
+    modoLector = false;
+    actualizarInicio();
+    mostrarPantalla('inicio');
+  } catch (error) {
+    mostrarMensaje(mensajeLogin, 'error', 'No hay conexión con el servidor. Revisá internet e intentá de nuevo.');
+  } finally {
+    botonLogin.disabled = false;
+    botonLogin.textContent = 'Entrar';
+  }
+});
+
+async function cerrarSesion() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch (error) {
+    // El servidor igualmente puede haber cerrado la sesión aunque falle la respuesta.
+  }
+  sesion = { autenticado: false, usuario: null };
+  modoLector = true;
+  actualizarInicio();
+  mostrarPantalla('inicio');
+}
 
 // =====================================================================
 // AGREGAR
@@ -42,7 +180,9 @@ const botonGuardar = formAgregar.querySelector('.boton-guardar');
 const campoTitulo = document.getElementById('campo-titulo');
 const campoAutor = document.getElementById('campo-autor');
 const campoEditorial = document.getElementById('campo-editorial');
-const campoNumero = document.getElementById('campo-numero');
+const campoTema = document.getElementById('campo-tema');
+const campoTejuelo = document.getElementById('campo-tejuelo');
+const campoInventario = document.getElementById('campo-inventario');
 const campoPdf = document.getElementById('campo-pdf');
 const botonElegirPdf = document.getElementById('btn-elegir-pdf');
 const nombrePdfElegido = document.getElementById('nombre-pdf-elegido');
@@ -59,26 +199,25 @@ async function prepararFormularioAgregar() {
   campoTitulo.focus();
 
   try {
-    const respuesta = await fetch('/api/libros/siguiente-numero');
+    const respuesta = await fetch('/api/libros/siguiente-inventario');
     const datos = await respuesta.json();
-    if (datos.ok) {
-      campoNumero.value = datos.siguiente;
-    }
+    if (datos.ok) campoInventario.value = datos.siguiente;
   } catch (error) {
-    // Si esto falla, no pasa nada: ella puede escribir el número a mano.
+    // Si falla, se puede escribir el inventario a mano.
   }
 }
 
 formAgregar.addEventListener('submit', async (evento) => {
   evento.preventDefault();
-
   if (!formAgregar.reportValidity()) return;
 
   const cuerpo = {
     titulo: campoTitulo.value,
     autor: campoAutor.value,
     editorial: campoEditorial.value,
-    numero_tarjeta: campoNumero.value,
+    tema: campoTema.value,
+    numero_tarjeta: campoTejuelo.value,
+    numero_inventario: campoInventario.value,
   };
   const archivoPdf = campoPdf.files[0] || null;
 
@@ -92,6 +231,14 @@ formAgregar.addEventListener('submit', async (evento) => {
       body: JSON.stringify(cuerpo),
     });
     const datos = await respuesta.json();
+
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      mostrarMensaje(mensajeAgregar, 'error', 'La sesión terminó. Iniciá sesión nuevamente.');
+      mostrarPantalla('login');
+      return;
+    }
 
     if (!datos.ok) {
       mostrarMensaje(mensajeAgregar, 'error', datos.error || 'No se pudo guardar el libro.');
@@ -110,7 +257,11 @@ formAgregar.addEventListener('submit', async (evento) => {
           body: datosFormulario,
         });
         const datosPdf = await respuestaPdf.json();
-        if (!datosPdf.ok) {
+        if (respuestaPdf.status === 401) {
+          sesion = { autenticado: false, usuario: null };
+          actualizarInicio();
+          mensajeFinal = 'El libro se guardó, pero la sesión terminó antes de subir el PDF.';
+        } else if (!datosPdf.ok) {
           mensajeFinal = `El libro se guardó, pero el PDF no se pudo subir (${datosPdf.error}). Podés subirlo después desde "Buscar un libro".`;
         }
       } catch (error) {
@@ -127,27 +278,6 @@ formAgregar.addEventListener('submit', async (evento) => {
     botonGuardar.textContent = 'Guardar libro';
   }
 });
-
-function mostrarMensaje(elemento, tipo, texto) {
-  elemento.innerHTML = '';
-
-  const icono = document.createElement('span');
-  icono.className = 'icono-mensaje';
-  icono.innerHTML = tipo === 'exito' ? ICONO_EXITO : ICONO_ERROR;
-
-  const span = document.createElement('span');
-  span.textContent = texto;
-
-  elemento.appendChild(icono);
-  elemento.appendChild(span);
-  elemento.classList.remove('oculta');
-  elemento.className = `mensaje ${tipo}`;
-}
-
-function ocultarMensaje(elemento) {
-  elemento.className = 'mensaje oculta';
-  elemento.innerHTML = '';
-}
 
 // =====================================================================
 // BUSCAR
@@ -221,9 +351,21 @@ function crearFichaLibro(libro) {
     ficha.appendChild(editorial);
   }
 
-  const numero = document.createElement('p');
-  numero.textContent = `Número de tarjeta: ${libro.numero_tarjeta}`;
-  ficha.appendChild(numero);
+  if (libro.tema) {
+    const tema = document.createElement('p');
+    tema.textContent = `Tema: ${libro.tema}`;
+    ficha.appendChild(tema);
+  }
+
+  const tejuelo = document.createElement('p');
+  tejuelo.textContent = `Tejuelo: ${libro.numero_tarjeta}`;
+  ficha.appendChild(tejuelo);
+
+  if (libro.numero_inventario) {
+    const inventario = document.createElement('p');
+    inventario.textContent = `Número de inventario: ${libro.numero_inventario}`;
+    ficha.appendChild(inventario);
+  }
 
   const filaAcciones = document.createElement('div');
   filaAcciones.className = 'fila-acciones';
@@ -233,20 +375,19 @@ function crearFichaLibro(libro) {
   actualizarZonaPdf(zonaPdf, libro);
   filaAcciones.appendChild(zonaPdf);
 
-  const botonBorrar = document.createElement('button');
-  botonBorrar.type = 'button';
-  botonBorrar.className = 'boton-borrar';
-  botonBorrar.innerHTML = `${ICONO_BASURA}<span>Borrar</span>`;
-  botonBorrar.addEventListener('click', () => borrarLibro(libro.id, libro.titulo));
+  if (sesion.autenticado && !modoLector) {
+    const botonBorrar = document.createElement('button');
+    botonBorrar.type = 'button';
+    botonBorrar.className = 'boton-borrar';
+    botonBorrar.innerHTML = `${ICONO_BASURA}<span>Borrar</span>`;
+    botonBorrar.addEventListener('click', () => borrarLibro(libro.id, libro.titulo));
+    filaAcciones.appendChild(botonBorrar);
+  }
 
-  filaAcciones.appendChild(botonBorrar);
   ficha.appendChild(filaAcciones);
-
   return ficha;
 }
 
-// Dibuja, dentro de "zonaPdf", el estado correspondiente: un enlace para ver
-// el PDF si el libro ya tiene uno, o un botón para subirlo si todavía no.
 function actualizarZonaPdf(zonaPdf, libro) {
   zonaPdf.innerHTML = '';
 
@@ -259,13 +400,15 @@ function actualizarZonaPdf(zonaPdf, libro) {
     verPdf.innerHTML = `${ICONO_DOCUMENTO}<span>Ver PDF</span>`;
     zonaPdf.appendChild(verPdf);
 
-    const quitar = document.createElement('button');
-    quitar.type = 'button';
-    quitar.className = 'enlace-quitar-pdf';
-    quitar.textContent = 'Quitar PDF';
-    quitar.addEventListener('click', () => quitarPdf(libro, zonaPdf));
-    zonaPdf.appendChild(quitar);
-  } else {
+    if (sesion.autenticado && !modoLector) {
+      const quitar = document.createElement('button');
+      quitar.type = 'button';
+      quitar.className = 'enlace-quitar-pdf';
+      quitar.textContent = 'Quitar PDF';
+      quitar.addEventListener('click', () => quitarPdf(libro, zonaPdf));
+      zonaPdf.appendChild(quitar);
+    }
+  } else if (sesion.autenticado && !modoLector) {
     const botonSubir = document.createElement('button');
     botonSubir.type = 'button';
     botonSubir.className = 'boton-pdf boton-subir-pdf';
@@ -305,6 +448,14 @@ async function subirPdfExistente(libro, archivo, zonaPdf, botonSubir) {
       body: datosFormulario,
     });
     const datos = await respuesta.json();
+
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      irABuscar(true);
+      return;
+    }
+
     if (datos.ok) {
       libro.tiene_pdf = true;
       actualizarZonaPdf(zonaPdf, libro);
@@ -327,6 +478,14 @@ async function quitarPdf(libro, zonaPdf) {
   try {
     const respuesta = await fetch(`/api/libros/${libro.id}/pdf`, { method: 'DELETE' });
     const datos = await respuesta.json();
+
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      irABuscar(true);
+      return;
+    }
+
     if (datos.ok) {
       libro.tiene_pdf = false;
       actualizarZonaPdf(zonaPdf, libro);
@@ -345,6 +504,14 @@ async function borrarLibro(id, titulo) {
   try {
     const respuesta = await fetch(`/api/libros/${id}`, { method: 'DELETE' });
     const datos = await respuesta.json();
+
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      irABuscar(true);
+      return;
+    }
+
     if (datos.ok) {
       buscarLibros(campoBusqueda.value.trim());
     } else {
@@ -354,3 +521,5 @@ async function borrarLibro(id, titulo) {
     window.alert('No hay conexión con el servidor.');
   }
 }
+
+actualizarEstadoSesion();

@@ -11,7 +11,6 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
 <header class="encabezado">
   <div class="encabezado-contenido">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -21,31 +20,81 @@
     <h1>Biblin</h1>
   </div>
 </header>
-
 <main>
 
   <!-- INICIO -->
   <section id="pantalla-inicio" class="pantalla">
-    <button type="button" class="boton-grande boton-agregar" id="btn-ir-agregar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
-        <line x1="12" y1="5" x2="12" y2="19"/>
-        <line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-      <span>Agregar un libro</span>
-    </button>
+    <div id="barra-sesion" class="barra-sesion oculta">
+      <span id="texto-sesion"></span>
+      <button type="button" id="btn-cerrar-sesion" class="boton-sesion-secundario">Cerrar sesión</button>
+    </div>
 
-    <button type="button" class="boton-grande boton-buscar" id="btn-ir-buscar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
-        <circle cx="10.5" cy="10.5" r="6.5"/>
-        <line x1="15.3" y1="15.3" x2="21" y2="21"/>
-      </svg>
-      <span>Buscar un libro</span>
+    <div id="inicio-publico" class="inicio-publico">
+      <button type="button" class="boton-grande boton-buscar" id="btn-solo-lector">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+          <circle cx="10.5" cy="10.5" r="6.5"/>
+          <line x1="15.3" y1="15.3" x2="21" y2="21"/>
+        </svg>
+        <span>Solo lector</span>
+      </button>
+
+      <button type="button" class="boton-grande boton-agregar" id="btn-ir-login">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/>
+          <polyline points="10 8 14 12 10 16"/>
+          <line x1="14" y1="12" x2="3" y2="12"/>
+        </svg>
+        <span>Iniciar sesión</span>
+      </button>
+    </div>
+
+    <div id="inicio-admin" class="inicio-publico oculta">
+      <button type="button" class="boton-grande boton-agregar" id="btn-ir-agregar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span>Agregar un libro</span>
+      </button>
+
+      <button type="button" class="boton-grande boton-buscar" id="btn-ir-buscar-admin">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+          <circle cx="10.5" cy="10.5" r="6.5"/>
+          <line x1="15.3" y1="15.3" x2="21" y2="21"/>
+        </svg>
+        <span>Buscar un libro</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- LOGIN -->
+  <section id="pantalla-login" class="pantalla oculta">
+    <button type="button" class="boton-volver" data-volver="inicio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 5 8 12 15 19"/></svg>
+      Volver
     </button>
+    <h2>Iniciar sesión</h2>
+
+    <form id="form-login" novalidate>
+      <div class="campo">
+        <label for="campo-usuario">Usuario</label>
+        <input type="text" id="campo-usuario" autocomplete="username" required>
+      </div>
+
+      <div class="campo">
+        <label for="campo-clave">Contraseña</label>
+        <input type="password" id="campo-clave" autocomplete="current-password" required>
+      </div>
+
+      <button type="submit" class="boton-guardar">Entrar</button>
+    </form>
+
+    <div id="mensaje-login" class="mensaje oculta" role="alert" aria-live="assertive"></div>
   </section>
 
   <!-- AGREGAR -->
   <section id="pantalla-agregar" class="pantalla oculta">
-    <button type="button" class="boton-volver" data-volver>
+    <button type="button" class="boton-volver" data-volver="inicio">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 5 8 12 15 19"/></svg>
       Volver
     </button>
@@ -68,8 +117,18 @@
       </div>
 
       <div class="campo">
-        <label for="campo-numero">Número de tarjeta</label>
-        <input type="text" id="campo-numero" autocomplete="off" inputmode="numeric" required>
+        <label for="campo-tema">Tema</label>
+        <input type="text" id="campo-tema" autocomplete="off" placeholder="Ej.: Matemática, Terror, Ciencias naturales" required>
+      </div>
+
+      <div class="campo">
+        <label for="campo-tejuelo">Tejuelo</label>
+        <input type="text" id="campo-tejuelo" autocomplete="off" placeholder="Ej.: MAT-025, LIT123, TEC-4" required>
+      </div>
+
+      <div class="campo">
+        <label for="campo-inventario">Número de inventario</label>
+        <input type="text" id="campo-inventario" autocomplete="off" inputmode="numeric" pattern="[0-9]+" required>
       </div>
 
       <div class="campo">
@@ -89,14 +148,16 @@
 
   <!-- BUSCAR -->
   <section id="pantalla-buscar" class="pantalla oculta">
-    <button type="button" class="boton-volver" data-volver>
+    <button type="button" class="boton-volver" data-volver="inicio">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 5 8 12 15 19"/></svg>
       Volver
     </button>
     <h2>Buscar un libro</h2>
 
+    <div id="indicador-lector" class="indicador-lector oculta">Modo solo lector</div>
+
     <form id="form-buscar" class="fila-busqueda">
-      <input type="text" id="campo-busqueda" placeholder="Título, autor, editorial o número" autocomplete="off">
+      <input type="text" id="campo-busqueda" placeholder="Título, autor, editorial, tema, tejuelo o inventario" autocomplete="off">
       <button type="submit">Buscar</button>
     </form>
 

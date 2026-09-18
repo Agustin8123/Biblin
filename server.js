@@ -13,51 +13,125 @@ const pool = require('./db');
 const app = express();
 const PUERTO = process.env.PORT || 3000;
 const MAX_PDF_MB = Number(process.env.MAX_PDF_MB) || 100;
-
-// Carpeta donde se guardan los PDF subidos (fuera de "public" para que no
-// se puedan listar ni abrir directamente sin pasar por las rutas de abajo).
 const CARPETA_PDFS = path.join(__dirname, 'uploads', 'pdfs');
 fs.mkdirSync(CARPETA_PDFS, { recursive: true });
 
-// Si la app corre detrás de un proxy inverso (recomendado, ver README),
-// esto permite que el limitador de pedidos identifique bien cada visitante.
 app.set('trust proxy', 1);
-
 app.use(helmet());
 app.use(express.json({ limit: '100kb' }));
 
 // ---------------------------------------------------------------------------
-// Protección opcional con usuario y contraseña.
-// Si se definen SITE_USER y SITE_PASSWORD en el archivo .env, la aplicación
-// entera pide esas credenciales antes de mostrar nada. Si no se definen,
-// queda abierta tal como está (pensado para cuando ya se protege el acceso
-// de otra forma, por ejemplo restringiendo la red).
+// Autenticación basada en sesiones.
+// Las cuentas viven exclusivamente en .env y NO en PostgreSQL.
+// Ejemplo:
+// BIBLIN_USERS={"admin":"clave1","biblioteca":"clave2"}
 // ---------------------------------------------------------------------------
-function pedirCredenciales(req, res, next) {
-  const usuario = process.env.SITE_USER;
-  const clave = process.env.SITE_PASSWORD;
+function cargarCuentas() {
+  const bruto = String(process.env.BIBLIN_USERS || '').trim();
+  if (!bruto) return {};
 
-  if (!usuario || !clave) return next();
+  try {
+    const cuentas = JSON.parse(bruto);
+    if (!cuentas || typeof cuentas !== 'object' || Array.isArray(cuentas)) {
+      throw new Error('BIBLIN_USERS debe ser un objeto JSON.');
+    }
 
-  const encabezado = req.headers.authorization || '';
-  const [tipo, valor] = encabezado.split(' ');
-
-  if (tipo === 'Basic' && valor) {
-    const decodificado = Buffer.from(valor, 'base64').toString('utf8');
-    const separador = decodificado.indexOf(':');
-    const u = decodificado.slice(0, separador);
-    const p = decodificado.slice(separador + 1);
-    if (u === usuario && p === clave) return next();
+    const resultado = {};
+    for (const [usuario, clave] of Object.entries(cuentas)) {
+      if (!usuario.trim() || typeof clave !== 'string') continue;
+      resultado[usuario] = clave;
+    }
+    return resultado;
+  } catch (error) {
+    console.error('Error en BIBLIN_USERS:', error.message);
+    return {};
   }
-
-  res.set('WWW-Authenticate', 'Basic realm="Biblioteca"');
-  return res.status(401).send('Hace falta usuario y contraseña para entrar.');
 }
 
-app.use(pedirCredenciales);
-app.use(express.static(path.join(__dirname, 'public')));
+const CUENTAS = cargarCuentas();
+const SESIONES = new Map();
+const DURACION_SESION_MS = 12 * 60 * 60 * 1000;
+const NOMBRE_COOKIE_SESION = 'biblin_session';
 
-// Límite general para la API: evita que alguien la sature de pedidos.
+function compararSeguro(a, b) {
+  const bufferA = Buffer.from(String(a));
+  const bufferB = Buffer.from(String(b));
+  if (bufferA.length !== bufferB.length) return false;
+  return crypto.timingSafeEqual(bufferA, bufferB);
+}
+
+function analizarCookies(encabezado) {
+  const cookies = {};
+  if (!encabezado) return cookies;
+
+  for (const parte of encabezado.split(';')) {
+    const separador = parte.indexOf('=');
+    if (separador === -1) continue;
+    const nombre = parte.slice(0, separador).trim();
+    const valor = parte.slice(separador + 1).trim();
+    if (nombre) cookies[nombre] = valor;
+  }
+  return cookies;
+}
+
+function obtenerSesion(req) {
+  const cookies = analizarCookies(req.headers.cookie || '');
+  const token = cookies[NOMBRE_COOKIE_SESION];
+  if (!token) return null;
+
+  const sesion = SESIONES.get(token);
+  if (!sesion) return null;
+
+  if (sesion.expira <= Date.now()) {
+    SESIONES.delete(token);
+    return null;
+  }
+
+  return sesion;
+}
+
+function esConexionSegura(req) {
+  return req.secure || req.headers['x-forwarded-proto'] === 'https';
+}
+
+function establecerCookieSesion(res, req, token) {
+  const partes = [
+    `${NOMBRE_COOKIE_SESION}=${token}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Strict',
+    `Max-Age=${Math.floor(DURACION_SESION_MS / 1000)}`,
+  ];
+  if (esConexionSegura(req)) partes.push('Secure');
+  res.setHeader('Set-Cookie', partes.join('; '));
+}
+
+function borrarCookieSesion(res) {
+  res.setHeader(
+    'Set-Cookie',
+    `${NOMBRE_COOKIE_SESION}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`
+  );
+}
+
+function exigirLogin(req, res, next) {
+  const sesion = obtenerSesion(req);
+  if (sesion) {
+    req.sesion = sesion;
+    return next();
+  }
+  return res.status(401).json({ ok: false, error: 'Necesitás iniciar sesión para hacer eso.' });
+}
+
+setInterval(() => {
+  const ahora = Date.now();
+  for (const [token, sesion] of SESIONES) {
+    if (sesion.expira <= ahora) SESIONES.delete(token);
+  }
+}, 30 * 60 * 1000).unref();
+
+// ---------------------------------------------------------------------------
+// Límites de pedidos
+// ---------------------------------------------------------------------------
 const limitadorApi = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -67,8 +141,14 @@ const limitadorApi = rateLimit({
 });
 app.use('/api/', limitadorApi);
 
-// Límite más estricto específicamente para subir archivos, que son pedidos
-// más pesados que el resto de la API.
+const limitadorLogin = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'Demasiados intentos de inicio de sesión. Esperá unos minutos y probá de nuevo.' },
+});
+
 const limitadorSubidas = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60,
@@ -76,6 +156,56 @@ const limitadorSubidas = rateLimit({
   legacyHeaders: false,
   message: { ok: false, error: 'Demasiados archivos subidos seguidos. Esperá un momento y probá de nuevo.' },
 });
+
+// ---------------------------------------------------------------------------
+// Autenticación API
+// ---------------------------------------------------------------------------
+app.get('/api/auth/estado', (req, res) => {
+  const sesion = obtenerSesion(req);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    ok: true,
+    autenticado: Boolean(sesion),
+    usuario: sesion ? sesion.usuario : null,
+  });
+});
+
+app.post('/api/auth/login', limitadorLogin, (req, res) => {
+  if (Object.keys(CUENTAS).length === 0) {
+    return res.status(503).json({
+      ok: false,
+      error: 'No hay cuentas configuradas en el servidor. Revisá BIBLIN_USERS en el archivo .env.',
+    });
+  }
+
+  const usuario = typeof req.body?.usuario === 'string' ? req.body.usuario.trim() : '';
+  const clave = typeof req.body?.clave === 'string' ? req.body.clave : '';
+  const claveGuardada = Object.prototype.hasOwnProperty.call(CUENTAS, usuario)
+    ? CUENTAS[usuario]
+    : '';
+
+  if (!usuario || !clave || !claveGuardada || !compararSeguro(clave, claveGuardada)) {
+    return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos.' });
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  SESIONES.set(token, {
+    usuario,
+    expira: Date.now() + DURACION_SESION_MS,
+  });
+  establecerCookieSesion(res, req, token);
+  res.json({ ok: true, usuario });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const cookies = analizarCookies(req.headers.cookie || '');
+  const token = cookies[NOMBRE_COOKIE_SESION];
+  if (token) SESIONES.delete(token);
+  borrarCookieSesion(res);
+  res.json({ ok: true });
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------------------------------------------------------------------------
 // Subida de PDFs
@@ -99,8 +229,6 @@ const subidaPdf = multer({
   },
 }).single('pdf');
 
-// Comprueba que el archivo guardado empiece realmente con la firma de un PDF
-// (%PDF-), para no confiar solo en la extensión o el tipo que manda el navegador.
 function esPdfValido(rutaArchivo) {
   const buffer = Buffer.alloc(5);
   const fd = fs.openSync(rutaArchivo, 'r');
@@ -124,7 +252,9 @@ function validarLibro(cuerpo) {
   const titulo = comoTexto(cuerpo.titulo);
   const autor = comoTexto(cuerpo.autor);
   const editorial = comoTexto(cuerpo.editorial);
+  const tema = comoTexto(cuerpo.tema);
   const numero_tarjeta = comoTexto(cuerpo.numero_tarjeta);
+  const numero_inventario = comoTexto(cuerpo.numero_inventario);
 
   if (!titulo) return { error: 'Falta el título del libro.' };
   if (titulo.length > 500) return { error: 'El título es demasiado largo.' };
@@ -134,55 +264,83 @@ function validarLibro(cuerpo) {
 
   if (editorial.length > 300) return { error: 'La editorial es demasiado larga.' };
 
-  if (!numero_tarjeta) return { error: 'Falta el número de tarjeta.' };
-  if (numero_tarjeta.length > 100) return { error: 'El número de tarjeta es demasiado largo.' };
+  if (!tema) return { error: 'Falta el tema del libro.' };
+  if (tema.length > 200) return { error: 'El tema es demasiado largo.' };
 
-  return { datos: { titulo, autor, editorial: editorial || null, numero_tarjeta } };
+  if (!numero_tarjeta) return { error: 'Falta el tejuelo.' };
+  if (numero_tarjeta.length > 100) return { error: 'El tejuelo es demasiado largo.' };
+
+  if (!numero_inventario) return { error: 'Falta el número de inventario.' };
+  if (!/^[0-9]+$/.test(numero_inventario)) {
+    return { error: 'El número de inventario debe contener solamente números.' };
+  }
+  if (numero_inventario.length > 100) return { error: 'El número de inventario es demasiado largo.' };
+
+  return {
+    datos: {
+      titulo,
+      autor,
+      editorial: editorial || null,
+      tema,
+      numero_tarjeta,
+      numero_inventario,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
-// API
+// API de libros
 // ---------------------------------------------------------------------------
-
-// Sugiere el próximo número de tarjeta libre, para que no haya que llevar la
-// cuenta a mano. Sólo mira números de tarjeta que son puramente numéricos.
-app.get('/api/libros/siguiente-numero', async (req, res) => {
+app.get('/api/libros/siguiente-inventario', exigirLogin, async (req, res) => {
   try {
     const resultado = await pool.query(
-      `SELECT COALESCE(MAX(numero_tarjeta::integer), 0) + 1 AS siguiente
+      `SELECT COALESCE(MAX(numero_inventario::numeric), 0) + 1 AS siguiente
        FROM libros
-       WHERE numero_tarjeta ~ '^[0-9]+$'`
+       WHERE numero_inventario ~ '^[0-9]+$'`
     );
     res.json({ ok: true, siguiente: String(resultado.rows[0].siguiente) });
   } catch (error) {
-    console.error('Error al calcular el siguiente número:', error);
+    console.error('Error al calcular el siguiente inventario:', error);
     res.json({ ok: true, siguiente: '1' });
   }
 });
 
-// Agrega un libro nuevo.
-app.post('/api/libros', async (req, res) => {
+app.post('/api/libros', exigirLogin, async (req, res) => {
   const validacion = validarLibro(req.body || {});
   if (validacion.error) {
     return res.status(400).json({ ok: false, error: validacion.error });
   }
 
-  const { titulo, autor, editorial, numero_tarjeta } = validacion.datos;
+  const {
+    titulo,
+    autor,
+    editorial,
+    tema,
+    numero_tarjeta,
+    numero_inventario,
+  } = validacion.datos;
 
   try {
     const resultado = await pool.query(
-      `INSERT INTO libros (titulo, autor, editorial, numero_tarjeta)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, titulo, autor, editorial, numero_tarjeta, creado_en`,
-      [titulo, autor, editorial, numero_tarjeta]
+      `INSERT INTO libros
+         (titulo, autor, editorial, tema, numero_tarjeta, numero_inventario)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, creado_en`,
+      [titulo, autor, editorial, tema, numero_tarjeta, numero_inventario]
     );
     res.status(201).json({ ok: true, libro: resultado.rows[0] });
   } catch (error) {
     if (error.code === '23505') {
-      // Violación de la restricción UNIQUE sobre numero_tarjeta.
+      const detalle = String(error.detail || '');
+      if (detalle.includes('numero_inventario')) {
+        return res.status(409).json({
+          ok: false,
+          error: `Ya hay un libro guardado con el número de inventario "${numero_inventario}". Probá con otro número.`,
+        });
+      }
       return res.status(409).json({
         ok: false,
-        error: `Ya hay un libro guardado con el número de tarjeta "${numero_tarjeta}". Probá con otro número.`,
+        error: `Ya hay un libro guardado con el tejuelo "${numero_tarjeta}". Probá con otro tejuelo.`,
       });
     }
     console.error('Error al guardar el libro:', error);
@@ -190,8 +348,6 @@ app.post('/api/libros', async (req, res) => {
   }
 });
 
-// Busca libros por título, autor, editorial o número de tarjeta.
-// Si no se manda texto de búsqueda, devuelve todos (ordenados por título).
 app.get('/api/libros/buscar', async (req, res) => {
   const q = comoTexto(req.query.q);
 
@@ -199,19 +355,23 @@ app.get('/api/libros/buscar', async (req, res) => {
     let resultado;
     if (q) {
       resultado = await pool.query(
-        `SELECT id, titulo, autor, editorial, numero_tarjeta, creado_en, (pdf_archivo IS NOT NULL) AS tiene_pdf
+        `SELECT id, titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, creado_en,
+                (pdf_archivo IS NOT NULL) AS tiene_pdf
          FROM libros
          WHERE unaccent(titulo) ILIKE unaccent($1)
             OR unaccent(autor) ILIKE unaccent($1)
             OR unaccent(COALESCE(editorial, '')) ILIKE unaccent($1)
+            OR unaccent(COALESCE(tema, '')) ILIKE unaccent($1)
             OR unaccent(numero_tarjeta) ILIKE unaccent($1)
+            OR unaccent(COALESCE(numero_inventario, '')) ILIKE unaccent($1)
          ORDER BY titulo ASC
          LIMIT 200`,
         [`%${q}%`]
       );
     } else {
       resultado = await pool.query(
-        `SELECT id, titulo, autor, editorial, numero_tarjeta, creado_en, (pdf_archivo IS NOT NULL) AS tiene_pdf
+        `SELECT id, titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, creado_en,
+                (pdf_archivo IS NOT NULL) AS tiene_pdf
          FROM libros
          ORDER BY titulo ASC
          LIMIT 200`
@@ -224,15 +384,17 @@ app.get('/api/libros/buscar', async (req, res) => {
   }
 });
 
-// Borra un libro (para corregir errores de carga).
-app.delete('/api/libros/:id', async (req, res) => {
+app.delete('/api/libros/:id', exigirLogin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ ok: false, error: 'Ese libro no existe.' });
   }
 
   try {
-    const resultado = await pool.query('DELETE FROM libros WHERE id = $1 RETURNING id, pdf_archivo', [id]);
+    const resultado = await pool.query(
+      'DELETE FROM libros WHERE id = $1 RETURNING id, pdf_archivo',
+      [id]
+    );
     if (resultado.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Ese libro ya no está en la lista.' });
     }
@@ -246,8 +408,7 @@ app.delete('/api/libros/:id', async (req, res) => {
   }
 });
 
-// Sube (o reemplaza) el PDF de un libro ya existente.
-app.post('/api/libros/:id/pdf', limitadorSubidas, (req, res) => {
+app.post('/api/libros/:id/pdf', exigirLogin, limitadorSubidas, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ ok: false, error: 'Ese libro no existe.' });
@@ -264,7 +425,6 @@ app.post('/api/libros/:id/pdf', limitadorSubidas, (req, res) => {
       console.error('Error al subir el PDF:', error);
       return res.status(400).json({ ok: false, error: 'No se pudo subir el archivo.' });
     }
-
     if (!req.file) {
       return res.status(400).json({ ok: false, error: 'No se recibió ningún archivo.' });
     }
@@ -282,7 +442,6 @@ app.post('/api/libros/:id/pdf', limitadorSubidas, (req, res) => {
       }
 
       await pool.query('UPDATE libros SET pdf_archivo = $1 WHERE id = $2', [req.file.filename, id]);
-
       if (anterior.rows[0].pdf_archivo) {
         borrarArchivo(path.join(CARPETA_PDFS, anterior.rows[0].pdf_archivo));
       }
@@ -296,7 +455,7 @@ app.post('/api/libros/:id/pdf', limitadorSubidas, (req, res) => {
   });
 });
 
-// Muestra el PDF de un libro para abrirlo en el navegador.
+// El PDF permanece disponible para Solo lector.
 app.get('/api/libros/:id/pdf', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
@@ -304,7 +463,10 @@ app.get('/api/libros/:id/pdf', async (req, res) => {
   }
 
   try {
-    const resultado = await pool.query('SELECT titulo, pdf_archivo FROM libros WHERE id = $1', [id]);
+    const resultado = await pool.query(
+      'SELECT titulo, pdf_archivo FROM libros WHERE id = $1',
+      [id]
+    );
     if (resultado.rows.length === 0 || !resultado.rows[0].pdf_archivo) {
       return res.status(404).send('Este libro todavía no tiene un PDF cargado.');
     }
@@ -330,8 +492,7 @@ app.get('/api/libros/:id/pdf', async (req, res) => {
   }
 });
 
-// Quita el PDF de un libro (por si se subió el archivo equivocado).
-app.delete('/api/libros/:id/pdf', async (req, res) => {
+app.delete('/api/libros/:id/pdf', exigirLogin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ ok: false, error: 'Ese libro no existe.' });
@@ -344,9 +505,7 @@ app.delete('/api/libros/:id/pdf', async (req, res) => {
     }
 
     const pdfActual = resultado.rows[0].pdf_archivo;
-    if (!pdfActual) {
-      return res.json({ ok: true });
-    }
+    if (!pdfActual) return res.json({ ok: true });
 
     await pool.query('UPDATE libros SET pdf_archivo = NULL WHERE id = $1', [id]);
     borrarArchivo(path.join(CARPETA_PDFS, pdfActual));
@@ -362,5 +521,8 @@ app.use('/api/', (req, res) => {
 });
 
 app.listen(PUERTO, '0.0.0.0', () => {
+  if (Object.keys(CUENTAS).length === 0) {
+    console.warn('ADVERTENCIA: no hay cuentas configuradas en BIBLIN_USERS. Biblin funcionará en modo Solo lector hasta configurarlas.');
+  }
   console.log(`Biblioteca escuchando en el puerto ${PUERTO}`);
 });
