@@ -1,4 +1,4 @@
-# Nuestra Biblioteca
+# Biblin
 
 Aplicación web simple para llevar el inventario de una biblioteca. Permite
 agregar libros y buscarlos por título, autor, editorial o número de tarjeta.
@@ -88,36 +88,3 @@ misma máquina, abrí `http://localhost:3000` en el navegador.
 - Solo se aceptan archivos que sean realmente PDF (se revisa el contenido
   del archivo, no solo el nombre), así que no hace falta preocuparse por
   que alguien suba otra cosa con extensión `.pdf`.
-
-## Poner el servidor abierto a internet: recomendaciones
-
-Vas a exponer un formulario que escribe en una base de datos, así que
-conviene sumar un par de capas de protección además de la aplicación en sí:
-
-1. **HTTPS con un proxy inverso.** No expongas Node directamente al puerto
-   80/443. Poné [Caddy](https://caddyserver.com/) o Nginx + Certbot delante;
-   Caddy en particular consigue el certificado HTTPS solo, con muy poca
-   configuración. Si usás Nginx, recordá subir `client_max_body_size` (por
-   defecto es 1 MB) para que no corte la subida de PDFs grandes antes de
-   que lleguen a Node.
-2. **No expongas el puerto de PostgreSQL (5432) a internet.** Que escuche
-   solo en `localhost` o en la red interna; la aplicación Node es la única
-   que necesita hablarle a la base.
-3. **Contraseña de acceso (opcional, ya incluida).** Si en `.env` completás
-   `SITE_USER` y `SITE_PASSWORD`, el navegador va a pedir usuario y clave
-   antes de mostrar cualquier página. Es una sola vez por navegador (el
-   propio navegador la recuerda). Recomendado si el servidor queda
-   accesible para cualquiera en internet, no solo para tu familia.
-4. **Mantené las dependencias al día** corriendo `npm audit` de tanto en
-   tanto y actualizando con `npm update` cuando haya avisos.
-
-Con el proxy inverso manejando HTTPS y el acceso restringido de alguna de
-estas formas, el resto de la aplicación (límite de pedidos por minuto,
-validación de datos, consultas parametrizadas contra SQL injection) ya
-viene resuelto en el código.
-
-## Personalizar el nombre
-
-El título "Nuestra Biblioteca" está en `public/index.html` (etiqueta
-`<title>` y `<h1>`) y se puede cambiar por el nombre real de la biblioteca
-o de la familia sin tocar nada más.
