@@ -175,7 +175,8 @@ main {
 }
 
 #form-login input[type="text"],
-#form-login input[type="password"] {
+#form-login input[type="password"],
+#form-agregar input[type="text"] {
   width: 100%;
   font-size: 21px;
   padding: 16px;
@@ -185,8 +186,10 @@ main {
   color: var(--tinta);
   box-sizing: border-box;
 }
+
 #form-login input[type="text"]:focus,
-#form-login input[type="password"]:focus {
+#form-login input[type="password"]:focus,
+#form-agregar input[type="text"]:focus {
   border-color: var(--verde);
   outline: none;
 }
