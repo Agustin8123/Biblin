@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="theme-color" content="#1F4D3A">
+<title>Nuestra Biblioteca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="encabezado">
+  <div class="encabezado-contenido">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M2 5.5C2 5.5 5 4 8.5 4.5C10 4.7 11.3 5.3 12 6V19.5C11.3 18.8 10 18.2 8.5 18C5 17.5 2 19 2 19V5.5Z"/>
+      <path d="M22 5.5C22 5.5 19 4 15.5 4.5C14 4.7 12.7 5.3 12 6V19.5C12.7 18.8 14 18.2 15.5 18C19 17.5 22 19 22 19V5.5Z"/>
+    </svg>
+    <h1>Nuestra Biblioteca</h1>
+  </div>
+</header>
+
+<main>
+
+  <!-- INICIO -->
+  <section id="pantalla-inicio" class="pantalla">
+    <button type="button" class="boton-grande boton-agregar" id="btn-ir-agregar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      <span>Agregar un libro</span>
+    </button>
+
+    <button type="button" class="boton-grande boton-buscar" id="btn-ir-buscar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+        <circle cx="10.5" cy="10.5" r="6.5"/>
+        <line x1="15.3" y1="15.3" x2="21" y2="21"/>
+      </svg>
+      <span>Buscar un libro</span>
+    </button>
+  </section>
+
+  <!-- AGREGAR -->
+  <section id="pantalla-agregar" class="pantalla oculta">
+    <button type="button" class="boton-volver" data-volver>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 5 8 12 15 19"/></svg>
+      Volver
+    </button>
+    <h2>Agregar un libro</h2>
+
+    <form id="form-agregar" novalidate>
+      <div class="campo">
+        <label for="campo-titulo">Título</label>
+        <input type="text" id="campo-titulo" autocomplete="off" required>
+      </div>
+
+      <div class="campo">
+        <label for="campo-autor">Autor</label>
+        <input type="text" id="campo-autor" autocomplete="off" required>
+      </div>
+
+      <div class="campo">
+        <label for="campo-editorial">Editorial</label>
+        <input type="text" id="campo-editorial" autocomplete="off">
+      </div>
+
+      <div class="campo">
+        <label for="campo-numero">Número de tarjeta</label>
+        <input type="text" id="campo-numero" autocomplete="off" inputmode="numeric" required>
+      </div>
+
+      <div class="campo">
+        <label for="campo-pdf">Versión digitalizada en PDF (opcional)</label>
+        <button type="button" class="boton-elegir-archivo" id="btn-elegir-pdf">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <span id="nombre-pdf-elegido">Elegir archivo PDF</span>
+        </button>
+        <input type="file" id="campo-pdf" accept="application/pdf" class="input-archivo-oculto" tabindex="-1" aria-hidden="true">
+      </div>
+
+      <button type="submit" class="boton-guardar">Guardar libro</button>
+    </form>
+
+    <div id="mensaje-agregar" class="mensaje oculta" role="status" aria-live="polite"></div>
+  </section>
+
+  <!-- BUSCAR -->
+  <section id="pantalla-buscar" class="pantalla oculta">
+    <button type="button" class="boton-volver" data-volver>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 5 8 12 15 19"/></svg>
+      Volver
+    </button>
+    <h2>Buscar un libro</h2>
+
+    <form id="form-buscar" class="fila-busqueda">
+      <input type="text" id="campo-busqueda" placeholder="Título, autor, editorial o número" autocomplete="off">
+      <button type="submit">Buscar</button>
+    </form>
+
+    <div id="resultados" aria-live="polite"></div>
+  </section>
+
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

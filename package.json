@@ -1,0 +1,18 @@
+{
+  "name": "biblioteca-inventario",
+  "version": "1.0.0",
+  "description": "Inventario simple de libros para biblioteca, con interfaz pensada para usuarios sin experiencia técnica.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.12.0"
+  }
+}
