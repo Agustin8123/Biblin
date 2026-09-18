@@ -156,7 +156,9 @@ main {
   font-size: 18px;
   margin-bottom: 8px;
 }
-.campo input[type="text"] {
+
+#form-login input[type="text"],
+#form-login input[type="password"] {
   width: 100%;
   font-size: 21px;
   padding: 16px;
@@ -164,8 +166,10 @@ main {
   border-radius: var(--radio);
   background: var(--superficie);
   color: var(--tinta);
+  box-sizing: border-box;
 }
-.campo input[type="text"]:focus {
+#form-login input[type="text"]:focus,
+#form-login input[type="password"]:focus {
   border-color: var(--verde);
   outline: none;
 }

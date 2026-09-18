@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS libros (
     numero_tarjeta  VARCHAR(100) NOT NULL,
     pdf_archivo     VARCHAR(255),
     creado_en       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    tema VARCHAR(200),
+    numero_inventario INTEGER,
     CONSTRAINT numero_tarjeta_unico UNIQUE (numero_tarjeta)
 );
 
