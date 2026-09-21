@@ -302,15 +302,43 @@ function validarLibro(cuerpo) {
   };
 }
 
+
+function esFechaISO(valor) {
+  if (typeof valor !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const [anio, mes, dia] = valor.split('-').map(Number);
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+  return fecha.getUTCFullYear() === anio
+    && fecha.getUTCMonth() === mes - 1
+    && fecha.getUTCDate() === dia;
+}
+
+function validarPrestamo(cuerpo) {
+  const libro_id = Number(cuerpo.libro_id);
+  const nombre = comoTexto(cuerpo.nombre);
+  const apellido = comoTexto(cuerpo.apellido);
+  const fecha_prestamo = comoTexto(cuerpo.fecha_prestamo);
+  const fecha_limite = comoTexto(cuerpo.fecha_limite);
+
+  if (!Number.isInteger(libro_id) || libro_id <= 0) return { error: 'Elegí un libro válido.' };
+  if (!nombre) return { error: 'Falta el nombre de la persona.' };
+  if (nombre.length > 150) return { error: 'El nombre es demasiado largo.' };
+  if (!apellido) return { error: 'Falta el apellido de la persona.' };
+  if (apellido.length > 150) return { error: 'El apellido es demasiado largo.' };
+  if (!esFechaISO(fecha_prestamo)) return { error: 'La fecha de préstamo no es válida.' };
+  if (!esFechaISO(fecha_limite)) return { error: 'La fecha límite no es válida.' };
+  if (fecha_limite < fecha_prestamo) return { error: 'La fecha límite no puede ser anterior a la fecha de préstamo.' };
+
+  return { datos: { libro_id, nombre, apellido, fecha_prestamo, fecha_limite } };
+}
+
 // ---------------------------------------------------------------------------
 // API de libros
 // ---------------------------------------------------------------------------
 app.get('/api/libros/siguiente-inventario', exigirLogin, async (req, res) => {
   try {
     const resultado = await pool.query(
-      `SELECT COALESCE(MAX(numero_inventario::numeric), 0) + 1 AS siguiente
-       FROM libros
-       WHERE numero_inventario ~ '^[0-9]+$'`
+      `SELECT COALESCE(MAX(numero_inventario), 0) + 1 AS siguiente
+       FROM libros`
     );
     res.json({ ok: true, siguiente: String(resultado.rows[0].siguiente) });
   } catch (error) {
@@ -369,25 +397,35 @@ app.get('/api/libros/buscar', async (req, res) => {
     let resultado;
     if (q) {
       resultado = await pool.query(
-        `SELECT id, titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, creado_en,
-                (pdf_archivo IS NOT NULL) AS tiene_pdf
-         FROM libros
-         WHERE unaccent(titulo) ILIKE unaccent($1)
-            OR unaccent(autor) ILIKE unaccent($1)
-            OR unaccent(COALESCE(editorial, '')) ILIKE unaccent($1)
-            OR unaccent(COALESCE(tema, '')) ILIKE unaccent($1)
-            OR unaccent(numero_tarjeta) ILIKE unaccent($1)
-            OR unaccent(COALESCE(numero_inventario::text, '')) ILIKE unaccent($1)
-         ORDER BY titulo ASC
+        `SELECT l.id, l.titulo, l.autor, l.editorial, l.tema, l.numero_tarjeta,
+                l.numero_inventario, l.creado_en,
+                (l.pdf_archivo IS NOT NULL) AS tiene_pdf,
+                NOT EXISTS (
+                  SELECT 1 FROM prestamos p
+                  WHERE p.libro_id = l.id AND p.fecha_devolucion IS NULL
+                ) AS disponible
+         FROM libros l
+         WHERE unaccent(l.titulo) ILIKE unaccent($1)
+            OR unaccent(l.autor) ILIKE unaccent($1)
+            OR unaccent(COALESCE(l.editorial, '')) ILIKE unaccent($1)
+            OR unaccent(COALESCE(l.tema, '')) ILIKE unaccent($1)
+            OR unaccent(l.numero_tarjeta) ILIKE unaccent($1)
+            OR unaccent(COALESCE(l.numero_inventario::text, '')) ILIKE unaccent($1)
+         ORDER BY l.titulo ASC
          LIMIT 200`,
         [`%${q}%`]
       );
     } else {
       resultado = await pool.query(
-        `SELECT id, titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, creado_en,
-                (pdf_archivo IS NOT NULL) AS tiene_pdf
-         FROM libros
-         ORDER BY titulo ASC
+        `SELECT l.id, l.titulo, l.autor, l.editorial, l.tema, l.numero_tarjeta,
+                l.numero_inventario, l.creado_en,
+                (l.pdf_archivo IS NOT NULL) AS tiene_pdf,
+                NOT EXISTS (
+                  SELECT 1 FROM prestamos p
+                  WHERE p.libro_id = l.id AND p.fecha_devolucion IS NULL
+                ) AS disponible
+         FROM libros l
+         ORDER BY l.titulo ASC
          LIMIT 200`
       );
     }
@@ -471,8 +509,160 @@ app.delete('/api/libros/:id', exigirLogin, async (req, res) => {
     }
     res.json({ ok: true });
   } catch (error) {
+    if (error.code === '23503') {
+      return res.status(409).json({
+        ok: false,
+        error: 'Este libro tiene préstamos registrados y no se puede borrar sin perder el historial.',
+      });
+    }
     console.error('Error al borrar el libro:', error);
     res.status(500).json({ ok: false, error: 'No se pudo borrar el libro. Probá de nuevo en un momento.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// API de préstamos
+// ---------------------------------------------------------------------------
+app.get('/api/prestamos', exigirLogin, async (req, res) => {
+  try {
+    const resultado = await pool.query(
+      `SELECT p.id, p.libro_id, p.nombre, p.apellido, p.fecha_prestamo, p.fecha_limite,
+              p.fecha_devolucion, p.registrado_por, p.devuelto_por, p.creado_en,
+              l.titulo, l.autor, l.numero_tarjeta, l.numero_inventario
+       FROM prestamos p
+       JOIN libros l ON l.id = p.libro_id
+       ORDER BY (p.fecha_devolucion IS NULL) DESC,
+                COALESCE(p.fecha_devolucion, p.fecha_prestamo) DESC, p.id DESC
+       LIMIT 1000`
+    );
+    res.json({ ok: true, prestamos: resultado.rows });
+  } catch (error) {
+    console.error('Error al listar préstamos:', error);
+    res.status(500).json({ ok: false, error: 'No se pudieron cargar los préstamos.' });
+  }
+});
+
+app.get('/api/prestamos/vencidos', exigirLogin, async (req, res) => {
+  const hoy = comoTexto(req.query.hoy);
+  if (!esFechaISO(hoy)) {
+    return res.status(400).json({ ok: false, error: 'La fecha local no es válida.' });
+  }
+
+  try {
+    const resultado = await pool.query(
+      `SELECT p.id, p.libro_id, p.nombre, p.apellido, p.fecha_prestamo, p.fecha_limite,
+              l.titulo, l.autor, l.numero_tarjeta, l.numero_inventario
+       FROM prestamos p
+       JOIN libros l ON l.id = p.libro_id
+       WHERE p.fecha_devolucion IS NULL AND p.fecha_limite < $1::date
+       ORDER BY p.fecha_limite ASC, l.titulo ASC`,
+      [hoy]
+    );
+    res.json({ ok: true, prestamos: resultado.rows });
+  } catch (error) {
+    console.error('Error al buscar préstamos vencidos:', error);
+    res.status(500).json({ ok: false, error: 'No se pudieron revisar los préstamos vencidos.' });
+  }
+});
+
+app.post('/api/prestamos', exigirLogin, async (req, res) => {
+  const validacion = validarPrestamo(req.body || {});
+  if (validacion.error) {
+    return res.status(400).json({ ok: false, error: validacion.error });
+  }
+
+  const { libro_id, nombre, apellido, fecha_prestamo, fecha_limite } = validacion.datos;
+  let cliente;
+
+  try {
+    cliente = await pool.connect();
+    await cliente.query('BEGIN');
+
+    const libro = await cliente.query(
+      'SELECT id, titulo FROM libros WHERE id = $1 FOR UPDATE',
+      [libro_id]
+    );
+    if (libro.rowCount === 0) {
+      await cliente.query('ROLLBACK');
+      return res.status(404).json({ ok: false, error: 'Ese libro ya no existe.' });
+    }
+
+    const activo = await cliente.query(
+      'SELECT id FROM prestamos WHERE libro_id = $1 AND fecha_devolucion IS NULL LIMIT 1',
+      [libro_id]
+    );
+    if (activo.rowCount > 0) {
+      await cliente.query('ROLLBACK');
+      return res.status(409).json({ ok: false, error: 'Ese libro ya está prestado y figura como no disponible.' });
+    }
+
+    const resultado = await cliente.query(
+      `INSERT INTO prestamos
+         (libro_id, nombre, apellido, fecha_prestamo, fecha_limite, registrado_por)
+       VALUES ($1, $2, $3, $4::date, $5::date, $6)
+       RETURNING id, libro_id, nombre, apellido, fecha_prestamo, fecha_limite,
+                 fecha_devolucion, registrado_por, creado_en`,
+      [libro_id, nombre, apellido, fecha_prestamo, fecha_limite, req.sesion.usuario]
+    );
+
+    await cliente.query('COMMIT');
+    res.status(201).json({
+      ok: true,
+      prestamo: { ...resultado.rows[0], titulo: libro.rows[0].titulo },
+    });
+  } catch (error) {
+    await cliente.query('ROLLBACK').catch(() => {});
+    if (error.code === '23505') {
+      return res.status(409).json({ ok: false, error: 'Ese libro ya está prestado y figura como no disponible.' });
+    }
+    console.error('Error al registrar préstamo:', error);
+    res.status(500).json({ ok: false, error: 'No se pudo registrar el préstamo.' });
+  } finally {
+    if (cliente) cliente.release();
+  }
+});
+
+app.post('/api/prestamos/:id/devolver', exigirLogin, async (req, res) => {
+  const id = Number(req.params.id);
+  const fechaDevolucion = comoTexto(req.body?.fecha_devolucion);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ ok: false, error: 'Ese préstamo no existe.' });
+  }
+  if (!esFechaISO(fechaDevolucion)) {
+    return res.status(400).json({ ok: false, error: 'La fecha de devolución no es válida.' });
+  }
+
+  try {
+    const actual = await pool.query(
+      'SELECT fecha_prestamo, fecha_devolucion FROM prestamos WHERE id = $1',
+      [id]
+    );
+    if (actual.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Ese préstamo ya no existe.' });
+    }
+    if (actual.rows[0].fecha_devolucion) {
+      return res.status(409).json({ ok: false, error: 'Ese libro ya figura como devuelto.' });
+    }
+    if (fechaDevolucion < String(actual.rows[0].fecha_prestamo).slice(0, 10)) {
+      return res.status(400).json({ ok: false, error: 'La devolución no puede ser anterior al préstamo.' });
+    }
+
+    const resultado = await pool.query(
+      `UPDATE prestamos
+       SET fecha_devolucion = $1::date, devuelto_por = $2
+       WHERE id = $3 AND fecha_devolucion IS NULL
+       RETURNING id, libro_id, fecha_devolucion, devuelto_por`,
+      [fechaDevolucion, req.sesion.usuario, id]
+    );
+
+    if (resultado.rowCount === 0) {
+      return res.status(409).json({ ok: false, error: 'Ese libro ya figura como devuelto.' });
+    }
+
+    res.json({ ok: true, prestamo: resultado.rows[0] });
+  } catch (error) {
+    console.error('Error al devolver libro:', error);
+    res.status(500).json({ ok: false, error: 'No se pudo registrar la devolución.' });
   }
 });
 

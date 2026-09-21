@@ -34,6 +34,14 @@ tildes (buscar "garcia" encuentra "García"). Viene con PostgreSQL, pero si
 `CREATE EXTENSION unaccent;` fallara, instalá el paquete `postgresql-contrib`
 de tu distribución.
 
+Si Biblin ya estaba instalado antes de agregar el sistema de préstamos, no hace falta recrear la base. Ejecutá solamente:
+
+```bash
+psql -h localhost -U biblioteca -d biblioteca -f db/migracion-prestamos.sql
+```
+
+Eso crea el historial de préstamos sin tocar los libros existentes.
+
 ## 2. Configurar la aplicación
 
 Las cuentas de gestión no se guardan en PostgreSQL. Se configuran manualmente en el archivo `.env` mediante `BIBLIN_USERS`, usando un objeto JSON, por ejemplo:
@@ -71,6 +79,8 @@ misma máquina, abrí `http://localhost:3000` en el navegador.
 - **Agregar un libro**: pide título, autor, editorial (opcional), tema, tejuelo, número de inventario y, opcionalmente, un PDF con la versión digitalizada. El tejuelo acepta letras y números; el número de inventario solo acepta números. El inventario se sugiere automáticamente con el siguiente número disponible.
 - **Buscar un libro**: un solo campo de búsqueda que revisa título, autor, editorial, tema, tejuelo y número de inventario al mismo tiempo. Dejarlo vacío y tocar "Buscar" muestra todos los libros ordenados alfabéticamente.
 - Con una sesión iniciada, cada resultado permite seleccionar libros individualmente o todos juntos para generar un PDF de tarjetas. También existe un botón para generar las tres tarjetas de un libro directamente. La generación del PDF se realiza en el navegador, no en el servidor.
+- **Prestar un libro**: busca entre los libros ya registrados, guarda nombre y apellido, fecha de préstamo y fecha límite. Por defecto usa la fecha local del navegador y una semana después; si esa fecha cae sábado o domingo, pasa al lunes. Un libro con un préstamo activo queda marcado como no disponible.
+- **Préstamos y devoluciones**: muestra los libros actualmente prestados y permite registrar la devolución. Los préstamos devueltos pasan al historial y nunca se eliminan. Al iniciar sesión, Biblin avisa mediante una ventana si existen préstamos fuera de fecha.
 - Cada resultado tiene:
   - **Ver PDF** (si el libro ya tiene uno cargado): lo abre en una pestaña
     nueva del navegador.

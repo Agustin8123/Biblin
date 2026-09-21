@@ -702,3 +702,315 @@ main {
     justify-content: flex-end;
   }
 }
+
+/* ---------- Préstamos ---------- */
+.boton-prestar {
+  background: #8A5A2B;
+}
+.boton-prestar:hover {
+  background: #6E471F;
+}
+.boton-prestamos {
+  background: #5B4778;
+}
+.boton-prestamos:hover {
+  background: #45355C;
+}
+
+.estado-disponibilidad {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 3px 0 8px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.estado-disponibilidad.disponible {
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+.estado-disponibilidad.no-disponible {
+  background: var(--error-fondo);
+  color: var(--error);
+}
+
+.boton-prestar-libro,
+.boton-elegir-prestamo,
+.boton-devolver,
+.boton-secundario {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.boton-prestar-libro {
+  padding: 9px 14px;
+  background: #8A5A2B;
+  border: 1.5px solid #8A5A2B;
+  color: #fff;
+}
+.boton-prestar-libro:hover:not(:disabled) {
+  background: #6E471F;
+  border-color: #6E471F;
+}
+.boton-prestar-libro:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.boton-prestar-libro svg {
+  width: 15px;
+  height: 15px;
+}
+
+.resultados-prestamo {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ficha-prestamo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.ficha-prestamo .boton-elegir-prestamo {
+  margin-top: 10px;
+}
+.boton-elegir-prestamo {
+  border: none;
+  padding: 10px 14px;
+  background: var(--verde);
+  color: #fff;
+}
+.boton-elegir-prestamo:hover:not(:disabled) {
+  background: var(--verde-oscuro);
+}
+.boton-elegir-prestamo:disabled {
+  background: #B7B1A5;
+  cursor: default;
+}
+
+.form-prestamo {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 2px solid var(--borde);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.libro-prestamo-seleccionado {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 15px 17px;
+  border-left: 5px solid var(--verde);
+  border-radius: 8px;
+  background: var(--superficie);
+}
+.libro-prestamo-seleccionado strong {
+  font-size: 20px;
+}
+.libro-prestamo-seleccionado span {
+  color: var(--tinta-suave);
+  font-size: 16px;
+}
+
+#form-prestamo input[type="text"],
+#form-prestamo input[type="date"] {
+  width: 100%;
+  font-size: 19px;
+  padding: 14px 15px;
+  border: 2px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--tinta);
+}
+#form-prestamo input[type="text"]:focus,
+#form-prestamo input[type="date"]:focus {
+  border-color: var(--verde);
+  outline: none;
+}
+.fila-fechas-prestamo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.ayuda-fecha {
+  margin: -8px 0 0;
+  color: var(--tinta-suave);
+  font-size: 15px;
+}
+
+.cabecera-prestamos {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.cabecera-prestamos p {
+  margin: 0;
+  color: var(--tinta-suave);
+  font-size: 16px;
+}
+.boton-secundario {
+  border: 1.5px solid var(--azul);
+  padding: 9px 14px;
+  background: transparent;
+  color: var(--azul);
+}
+.boton-secundario:hover {
+  background: rgba(44, 74, 107, 0.08);
+}
+.subtitulo-seccion {
+  margin: 0 0 12px;
+  font-size: 21px;
+}
+.historial-titulo {
+  margin-top: 32px;
+}
+.lista-prestamos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ficha-prestamo-registro {
+  position: relative;
+  padding: 16px 18px;
+  border: 1px solid var(--borde);
+  border-left: 5px solid var(--verde);
+  border-radius: 10px;
+  background: var(--superficie);
+}
+.ficha-prestamo-registro.prestamo-vencido {
+  border-left-color: var(--error);
+}
+.ficha-prestamo-registro h4 {
+  margin: 0 0 7px;
+  padding-right: 90px;
+  font-size: 19px;
+}
+.ficha-prestamo-registro p {
+  margin: 4px 0;
+  color: var(--tinta-suave);
+  font-size: 16px;
+}
+.etiqueta-vencido {
+  display: inline-flex;
+  margin-top: 7px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--error-fondo);
+  color: var(--error);
+  font-size: 13px;
+  font-weight: 700;
+}
+.boton-devolver {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border: none;
+  padding: 9px 13px;
+  background: var(--verde);
+  color: #fff;
+}
+.boton-devolver:hover {
+  background: var(--verde-oscuro);
+}
+.fecha-devolucion {
+  color: var(--exito) !important;
+}
+.estado-vacio-compacto {
+  padding: 22px 12px;
+}
+
+/* ---------- Aviso de préstamos vencidos ---------- */
+.modal-vencidos {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(25, 23, 18, 0.58);
+}
+.modal-vencidos-contenido {
+  width: min(560px, 100%);
+  max-height: min(80vh, 700px);
+  overflow: auto;
+  padding: 24px;
+  border-radius: var(--radio-grande);
+  background: var(--papel);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+}
+.modal-vencidos-contenido h2 {
+  margin: 0 0 8px;
+  color: var(--error);
+  font-size: 25px;
+}
+.modal-vencidos-contenido > p {
+  margin: 0 0 18px;
+}
+.lista-vencidos-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 18px;
+}
+.vencido-modal-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 13px;
+  border-left: 4px solid var(--error);
+  border-radius: 7px;
+  background: var(--error-fondo);
+}
+.vencido-modal-item span {
+  color: var(--tinta-suave);
+  font-size: 15px;
+}
+.boton-modal {
+  width: 100%;
+  margin-top: 0;
+  padding: 14px;
+  font-size: 18px;
+}
+
+.zona-gestion {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+  .fila-fechas-prestamo {
+    grid-template-columns: 1fr;
+  }
+
+  .cabecera-prestamos {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .boton-secundario {
+    width: 100%;
+  }
+
+  .ficha-prestamo-registro h4 {
+    padding-right: 0;
+  }
+
+  .boton-devolver {
+    position: static;
+    margin-top: 10px;
+    width: 100%;
+  }
+}

@@ -33,11 +33,6 @@
 
   <!-- INICIO -->
   <section id="pantalla-inicio" class="pantalla">
-    <div id="barra-sesion" class="barra-sesion oculta">
-      <span id="texto-sesion"></span>
-      <button type="button" id="btn-cerrar-sesion" class="boton-sesion-secundario">Cerrar sesión</button>
-    </div>
-
     <div id="inicio-publico" class="inicio-publico">
       <button type="button" class="boton-grande boton-buscar" id="btn-solo-lector">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
@@ -72,6 +67,26 @@
           <line x1="15.3" y1="15.3" x2="21" y2="21"/>
         </svg>
         <span>Buscar un libro</span>
+      </button>
+
+      <button type="button" class="boton-grande boton-prestar" id="btn-ir-prestar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 6h11a3 3 0 0 1 3 3v9"/>
+          <path d="M4 6v12h11"/>
+          <path d="M18 12h4"/>
+          <path d="M20 10l2 2-2 2"/>
+        </svg>
+        <span>Prestar un libro</span>
+      </button>
+
+      <button type="button" class="boton-grande boton-prestamos" id="btn-ir-prestamos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 3h10v4H7z"/>
+          <path d="M5 5h14v16H5z"/>
+          <path d="M8 11h8"/>
+          <path d="M8 15h6"/>
+        </svg>
+        <span>Préstamos y devoluciones</span>
       </button>
     </div>
   </section>
@@ -155,6 +170,73 @@
     <div id="mensaje-agregar" class="mensaje oculta" role="status" aria-live="polite"></div>
   </section>
 
+  <!-- PRESTAR -->
+  <section id="pantalla-prestar" class="pantalla oculta">
+    <button type="button" class="boton-volver" data-volver="inicio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 5 8 12 15 19"/></svg>
+      Volver
+    </button>
+    <h2>Prestar un libro</h2>
+
+    <form id="form-buscar-prestamo" class="fila-busqueda">
+      <input type="text" id="campo-busqueda-prestamo" placeholder="Título, autor, tejuelo o inventario" autocomplete="off">
+      <button type="submit">Buscar libro</button>
+    </form>
+
+    <div id="resultados-prestamo" class="resultados-prestamo" aria-live="polite"></div>
+
+    <form id="form-prestamo" class="form-prestamo oculta" novalidate>
+      <div id="libro-prestamo-seleccionado" class="libro-prestamo-seleccionado"></div>
+      <input type="hidden" id="prestamo-libro-id">
+
+      <div class="campo">
+        <label for="prestamo-nombre">Nombre</label>
+        <input type="text" id="prestamo-nombre" autocomplete="off" required>
+      </div>
+
+      <div class="campo">
+        <label for="prestamo-apellido">Apellido</label>
+        <input type="text" id="prestamo-apellido" autocomplete="off" required>
+      </div>
+
+      <div class="fila-fechas-prestamo">
+        <div class="campo">
+          <label for="prestamo-fecha">Fecha de préstamo</label>
+          <input type="date" id="prestamo-fecha" required>
+        </div>
+        <div class="campo">
+          <label for="prestamo-limite">Fecha límite</label>
+          <input type="date" id="prestamo-limite" required>
+        </div>
+      </div>
+
+      <p class="ayuda-fecha">Por defecto se usa hoy y una semana después. Si cae sábado o domingo, pasa al lunes.</p>
+      <button type="submit" class="boton-guardar">Registrar préstamo</button>
+    </form>
+
+    <div id="mensaje-prestamo" class="mensaje oculta" role="status" aria-live="polite"></div>
+  </section>
+
+  <!-- PRÉSTAMOS E HISTORIAL -->
+  <section id="pantalla-prestamos" class="pantalla oculta">
+    <button type="button" class="boton-volver" data-volver="inicio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 5 8 12 15 19"/></svg>
+      Volver
+    </button>
+    <h2>Préstamos y devoluciones</h2>
+
+    <div class="cabecera-prestamos">
+      <p>Los préstamos devueltos quedan guardados en el historial.</p>
+      <button type="button" id="btn-actualizar-prestamos" class="boton-secundario">Actualizar</button>
+    </div>
+
+    <h3 class="subtitulo-seccion">Prestados ahora</h3>
+    <div id="prestamos-activos" class="lista-prestamos" aria-live="polite"></div>
+
+    <h3 class="subtitulo-seccion historial-titulo">Historial</h3>
+    <div id="historial-prestamos" class="lista-prestamos" aria-live="polite"></div>
+  </section>
+
   <!-- BUSCAR -->
   <section id="pantalla-buscar" class="pantalla oculta">
     <button type="button" class="boton-volver" data-volver="inicio">
@@ -185,6 +267,16 @@
   </section>
 
 </main>
+
+
+<div id="modal-vencidos" class="modal-vencidos oculta" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-vencidos">
+  <div class="modal-vencidos-contenido">
+    <h2 id="titulo-modal-vencidos">Libros fuera de fecha</h2>
+    <p id="resumen-vencidos"></p>
+    <div id="lista-vencidos-modal" class="lista-vencidos-modal"></div>
+    <button type="button" id="btn-cerrar-vencidos" class="boton-guardar boton-modal">Entendido</button>
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>

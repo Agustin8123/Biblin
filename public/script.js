@@ -4,6 +4,7 @@ const ICONO_BASURA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const ICONO_DOCUMENTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/></svg>';
 const ICONO_SUBIR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>';
 const ICONO_LAPIZ = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const ICONO_PRESTAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h11a3 3 0 0 1 3 3v9"/><path d="M4 6v12h11"/><path d="M18 12h4"/><path d="M20 10l2 2-2 2"/></svg>';
 const ICONO_IMPRIMIR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/><circle cx="18" cy="12" r="1" fill="currentColor" stroke="none"/></svg>';
 
 const pantallas = {
@@ -11,6 +12,8 @@ const pantallas = {
   login: document.getElementById('pantalla-login'),
   agregar: document.getElementById('pantalla-agregar'),
   buscar: document.getElementById('pantalla-buscar'),
+  prestar: document.getElementById('pantalla-prestar'),
+  prestamos: document.getElementById('pantalla-prestamos'),
 };
 
 let sesion = {
@@ -21,6 +24,7 @@ let sesion = {
 let modoLector = true;
 let libroEditandoId = null;
 let librosActuales = [];
+let vencidosRevisados = false;
 
 function mostrarPantalla(nombre) {
   Object.values(pantallas).forEach((p) => p.classList.add('oculta'));
@@ -59,6 +63,7 @@ async function actualizarEstadoSesion() {
     sesion = { autenticado: false, usuario: null };
   }
   actualizarInicio();
+  if (sesion.autenticado) verificarPrestamosVencidos();
 }
 
 function actualizarInicio() {
@@ -118,6 +123,9 @@ document.getElementById('btn-ir-agregar').addEventListener('click', () => {
 
 document.getElementById('btn-ir-buscar-admin').addEventListener('click', () => irABuscar(false));
 
+document.getElementById('btn-ir-prestar').addEventListener('click', () => abrirPantallaPrestar());
+document.getElementById('btn-ir-prestamos').addEventListener('click', () => abrirPantallaPrestamos());
+
 document.getElementById('btn-cerrar-sesion').addEventListener('click', cerrarSesion);
 
 document.querySelectorAll('[data-volver]').forEach((boton) => {
@@ -161,6 +169,8 @@ formLogin.addEventListener('submit', async (evento) => {
     modoLector = false;
     actualizarInicio();
     mostrarPantalla('inicio');
+    vencidosRevisados = false;
+    verificarPrestamosVencidos();
   } catch (error) {
     mostrarMensaje(mensajeLogin, 'error', 'No hay conexión con el servidor. Revisá internet e intentá de nuevo.');
   } finally {
@@ -177,8 +187,396 @@ async function cerrarSesion() {
   }
   sesion = { autenticado: false, usuario: null };
   modoLector = true;
+  vencidosRevisados = false;
   actualizarInicio();
   mostrarPantalla('inicio');
+}
+
+// =====================================================================
+// PRÉSTAMOS Y DEVOLUCIONES
+// =====================================================================
+const formBuscarPrestamo = document.getElementById('form-buscar-prestamo');
+const campoBusquedaPrestamo = document.getElementById('campo-busqueda-prestamo');
+const resultadosPrestamo = document.getElementById('resultados-prestamo');
+const formPrestamo = document.getElementById('form-prestamo');
+const prestamoLibroId = document.getElementById('prestamo-libro-id');
+const prestamoNombre = document.getElementById('prestamo-nombre');
+const prestamoApellido = document.getElementById('prestamo-apellido');
+const prestamoFecha = document.getElementById('prestamo-fecha');
+const prestamoLimite = document.getElementById('prestamo-limite');
+const libroPrestamoSeleccionado = document.getElementById('libro-prestamo-seleccionado');
+const mensajePrestamo = document.getElementById('mensaje-prestamo');
+const prestamosActivos = document.getElementById('prestamos-activos');
+const historialPrestamos = document.getElementById('historial-prestamos');
+const botonActualizarPrestamos = document.getElementById('btn-actualizar-prestamos');
+const modalVencidos = document.getElementById('modal-vencidos');
+const resumenVencidos = document.getElementById('resumen-vencidos');
+const listaVencidosModal = document.getElementById('lista-vencidos-modal');
+const botonCerrarVencidos = document.getElementById('btn-cerrar-vencidos');
+
+function fechaLocalISO(fecha = new Date()) {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  return `${anio}-${mes}-${dia}`;
+}
+
+function fechaDesdeISO(iso) {
+  const [anio, mes, dia] = String(iso).split('-').map(Number);
+  return new Date(anio, mes - 1, dia, 12, 0, 0, 0);
+}
+
+function fechaLimitePorDefecto(fechaPrestamoISO) {
+  const fecha = fechaDesdeISO(fechaPrestamoISO);
+  fecha.setDate(fecha.getDate() + 7);
+  if (fecha.getDay() === 6) fecha.setDate(fecha.getDate() + 2);
+  if (fecha.getDay() === 0) fecha.setDate(fecha.getDate() + 1);
+  return fechaLocalISO(fecha);
+}
+
+function formatearFecha(iso) {
+  if (!iso) return '—';
+  const fecha = fechaDesdeISO(String(iso).slice(0, 10));
+  return fecha.toLocaleDateString('es-AR');
+}
+
+function prepararFechasPrestamo() {
+  const hoy = fechaLocalISO();
+  prestamoFecha.value = hoy;
+  prestamoLimite.value = fechaLimitePorDefecto(hoy);
+}
+
+prestamoFecha.addEventListener('change', () => {
+  if (prestamoFecha.value) {
+    prestamoLimite.value = fechaLimitePorDefecto(prestamoFecha.value);
+  }
+});
+
+formBuscarPrestamo.addEventListener('submit', (evento) => {
+  evento.preventDefault();
+  buscarLibrosParaPrestamo(campoBusquedaPrestamo.value.trim());
+});
+
+botonActualizarPrestamos.addEventListener('click', cargarPrestamos);
+botonCerrarVencidos.addEventListener('click', () => modalVencidos.classList.add('oculta'));
+
+function asegurarSesionAdministrativa() {
+  if (sesion.autenticado) return true;
+  mostrarPantalla('login');
+  campoUsuario.focus();
+  return false;
+}
+
+function abrirPantallaPrestar(libro = null) {
+  if (!asegurarSesionAdministrativa()) return;
+  modoLector = false;
+  ocultarMensaje(mensajePrestamo);
+  formPrestamo.classList.add('oculta');
+  prestamoLibroId.value = '';
+  libroPrestamoSeleccionado.innerHTML = '';
+  campoBusquedaPrestamo.value = '';
+  mostrarPantalla('prestar');
+
+  if (libro) {
+    seleccionarLibroPrestamo(libro);
+    resultadosPrestamo.innerHTML = '';
+  } else {
+    buscarLibrosParaPrestamo('');
+    campoBusquedaPrestamo.focus();
+  }
+}
+
+function abrirPantallaPrestamos() {
+  if (!asegurarSesionAdministrativa()) return;
+  modoLector = false;
+  mostrarPantalla('prestamos');
+  cargarPrestamos();
+}
+
+async function buscarLibrosParaPrestamo(texto) {
+  resultadosPrestamo.innerHTML = '<p class="estado-vacio">Buscando…</p>';
+  try {
+    const respuesta = await fetch(`/api/libros/buscar?q=${encodeURIComponent(texto)}`);
+    const datos = await respuesta.json();
+    if (!datos.ok) {
+      resultadosPrestamo.innerHTML = `<p class="estado-vacio">${datos.error || 'No se pudo buscar.'}</p>`;
+      return;
+    }
+    pintarLibrosParaPrestamo(datos.libros || []);
+  } catch (error) {
+    resultadosPrestamo.innerHTML = '<p class="estado-vacio">No hay conexión con el servidor.</p>';
+  }
+}
+
+function pintarLibrosParaPrestamo(libros) {
+  resultadosPrestamo.innerHTML = '';
+  if (libros.length === 0) {
+    resultadosPrestamo.innerHTML = '<p class="estado-vacio">No encontramos ningún libro.</p>';
+    return;
+  }
+
+  libros.forEach((libro) => {
+    const ficha = document.createElement('article');
+    ficha.className = 'ficha-libro ficha-prestamo';
+
+    const titulo = document.createElement('h3');
+    titulo.textContent = libro.titulo;
+    ficha.appendChild(titulo);
+
+    const datos = document.createElement('p');
+    datos.textContent = `${libro.autor} · Tejuelo: ${libro.numero_tarjeta}${libro.numero_inventario ? ` · Inv.: ${libro.numero_inventario}` : ''}`;
+    ficha.appendChild(datos);
+
+    const estado = document.createElement('span');
+    estado.className = `estado-disponibilidad ${libro.disponible ? 'disponible' : 'no-disponible'}`;
+    estado.textContent = libro.disponible ? 'Disponible' : 'Prestado · No disponible';
+    ficha.appendChild(estado);
+
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'boton-elegir-prestamo';
+    boton.textContent = libro.disponible ? 'Elegir este libro' : 'No disponible';
+    boton.disabled = !libro.disponible;
+    if (libro.disponible) boton.addEventListener('click', () => seleccionarLibroPrestamo(libro));
+    ficha.appendChild(boton);
+
+    resultadosPrestamo.appendChild(ficha);
+  });
+}
+
+function seleccionarLibroPrestamo(libro) {
+  if (!libro || libro.disponible === false) return;
+  prestamoLibroId.value = String(libro.id);
+  libroPrestamoSeleccionado.innerHTML = '';
+
+  const titulo = document.createElement('strong');
+  titulo.textContent = libro.titulo;
+  const detalle = document.createElement('span');
+  detalle.textContent = `${libro.autor} · Tejuelo ${libro.numero_tarjeta}${libro.numero_inventario ? ` · Inventario ${libro.numero_inventario}` : ''}`;
+  libroPrestamoSeleccionado.appendChild(titulo);
+  libroPrestamoSeleccionado.appendChild(detalle);
+
+  prestamoNombre.value = '';
+  prestamoApellido.value = '';
+  prepararFechasPrestamo();
+  ocultarMensaje(mensajePrestamo);
+  formPrestamo.classList.remove('oculta');
+  prestamoNombre.focus();
+  formPrestamo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+formPrestamo.addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  if (!formPrestamo.reportValidity()) return;
+
+  const cuerpo = {
+    libro_id: Number(prestamoLibroId.value),
+    nombre: prestamoNombre.value,
+    apellido: prestamoApellido.value,
+    fecha_prestamo: prestamoFecha.value,
+    fecha_limite: prestamoLimite.value,
+  };
+
+  const boton = formPrestamo.querySelector('button[type="submit"]');
+  boton.disabled = true;
+  boton.textContent = 'Registrando…';
+
+  try {
+    const respuesta = await fetch('/api/prestamos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+    });
+    const datos = await respuesta.json();
+
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      mostrarPantalla('login');
+      return;
+    }
+
+    if (!datos.ok) {
+      mostrarMensaje(mensajePrestamo, 'error', datos.error || 'No se pudo registrar el préstamo.');
+      return;
+    }
+
+    formPrestamo.classList.add('oculta');
+    prestamoLibroId.value = '';
+    mostrarMensaje(
+      mensajePrestamo,
+      'exito',
+      `Préstamo registrado. "${datos.prestamo.titulo}" ahora figura como no disponible.`
+    );
+    await buscarLibrosParaPrestamo(campoBusquedaPrestamo.value.trim());
+  } catch (error) {
+    mostrarMensaje(mensajePrestamo, 'error', 'No hay conexión con el servidor.');
+  } finally {
+    boton.disabled = false;
+    boton.textContent = 'Registrar préstamo';
+  }
+});
+
+async function cargarPrestamos() {
+  prestamosActivos.innerHTML = '<p class="estado-vacio">Cargando…</p>';
+  historialPrestamos.innerHTML = '<p class="estado-vacio">Cargando…</p>';
+
+  try {
+    const respuesta = await fetch('/api/prestamos', { cache: 'no-store' });
+    const datos = await respuesta.json();
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      mostrarPantalla('login');
+      return;
+    }
+    if (!datos.ok) throw new Error(datos.error || 'No se pudieron cargar los préstamos.');
+
+    const activos = datos.prestamos.filter((p) => !p.fecha_devolucion);
+    const historial = datos.prestamos.filter((p) => p.fecha_devolucion);
+    pintarPrestamosActivos(activos);
+    pintarHistorialPrestamos(historial);
+  } catch (error) {
+    prestamosActivos.innerHTML = '<p class="estado-vacio">No se pudieron cargar los préstamos.</p>';
+    historialPrestamos.innerHTML = '';
+  }
+}
+
+function pintarPrestamosActivos(prestamos) {
+  prestamosActivos.innerHTML = '';
+  if (prestamos.length === 0) {
+    prestamosActivos.innerHTML = '<p class="estado-vacio estado-vacio-compacto">No hay libros prestados en este momento.</p>';
+    return;
+  }
+
+  const hoy = fechaLocalISO();
+  prestamos.forEach((prestamo) => {
+    const ficha = crearFichaPrestamo(prestamo, true, hoy);
+    prestamosActivos.appendChild(ficha);
+  });
+}
+
+function pintarHistorialPrestamos(prestamos) {
+  historialPrestamos.innerHTML = '';
+  if (prestamos.length === 0) {
+    historialPrestamos.innerHTML = '<p class="estado-vacio estado-vacio-compacto">Todavía no hay devoluciones registradas.</p>';
+    return;
+  }
+  prestamos.forEach((prestamo) => historialPrestamos.appendChild(crearFichaPrestamo(prestamo, false)));
+}
+
+function crearFichaPrestamo(prestamo, activo, hoy = fechaLocalISO()) {
+  const ficha = document.createElement('article');
+  ficha.className = 'ficha-prestamo-registro';
+  const vencido = activo && String(prestamo.fecha_limite).slice(0, 10) < hoy;
+  if (vencido) ficha.classList.add('prestamo-vencido');
+
+  const titulo = document.createElement('h4');
+  titulo.textContent = prestamo.titulo;
+  ficha.appendChild(titulo);
+
+  const persona = document.createElement('p');
+  persona.innerHTML = `<strong>Prestado a:</strong> ${escaparHtml(prestamo.nombre)} ${escaparHtml(prestamo.apellido)}`;
+  ficha.appendChild(persona);
+
+  const fechas = document.createElement('p');
+  fechas.innerHTML = `<strong>Prestado:</strong> ${formatearFecha(prestamo.fecha_prestamo)} · <strong>Límite:</strong> ${formatearFecha(prestamo.fecha_limite)}`;
+  ficha.appendChild(fechas);
+
+  if (vencido) {
+    const aviso = document.createElement('span');
+    aviso.className = 'etiqueta-vencido';
+    aviso.textContent = 'Fuera de fecha';
+    ficha.appendChild(aviso);
+  }
+
+  if (activo) {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'boton-devolver';
+    boton.textContent = 'Devolver';
+    boton.addEventListener('click', () => devolverPrestamo(prestamo));
+    ficha.appendChild(boton);
+  } else {
+    const devolucion = document.createElement('p');
+    devolucion.className = 'fecha-devolucion';
+    devolucion.innerHTML = `<strong>Devuelto:</strong> ${formatearFecha(prestamo.fecha_devolucion)}`;
+    ficha.appendChild(devolucion);
+  }
+
+  return ficha;
+}
+
+async function devolverPrestamo(prestamo) {
+  const confirmar = window.confirm(`¿Registrar la devolución de "${prestamo.titulo}"?`);
+  if (!confirmar) return;
+
+  try {
+    const respuesta = await fetch(`/api/prestamos/${prestamo.id}/devolver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha_devolucion: fechaLocalISO() }),
+    });
+    const datos = await respuesta.json();
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      mostrarPantalla('login');
+      return;
+    }
+    if (!datos.ok) {
+      window.alert(datos.error || 'No se pudo registrar la devolución.');
+      return;
+    }
+    cargarPrestamos();
+  } catch (error) {
+    window.alert('No hay conexión con el servidor.');
+  }
+}
+
+function escaparHtml(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+async function verificarPrestamosVencidos() {
+  if (!sesion.autenticado || vencidosRevisados) return;
+  vencidosRevisados = true;
+
+  try {
+    const hoy = fechaLocalISO();
+    const respuesta = await fetch(`/api/prestamos/vencidos?hoy=${encodeURIComponent(hoy)}`, { cache: 'no-store' });
+    const datos = await respuesta.json();
+    if (!respuesta.ok || !datos.ok || !Array.isArray(datos.prestamos) || datos.prestamos.length === 0) return;
+
+    resumenVencidos.textContent = datos.prestamos.length === 1
+      ? 'Hay 1 libro que ya pasó su fecha límite.'
+      : `Hay ${datos.prestamos.length} libros que ya pasaron su fecha límite.`;
+
+    listaVencidosModal.innerHTML = '';
+    datos.prestamos.forEach((prestamo) => {
+      const item = document.createElement('div');
+      item.className = 'vencido-modal-item';
+
+      const titulo = document.createElement('strong');
+      titulo.textContent = prestamo.titulo;
+      const detalle = document.createElement('span');
+      detalle.textContent = `${prestamo.nombre} ${prestamo.apellido} · Venció ${formatearFecha(prestamo.fecha_limite)}`;
+
+      item.appendChild(titulo);
+      item.appendChild(detalle);
+      listaVencidosModal.appendChild(item);
+    });
+
+    modalVencidos.classList.remove('oculta');
+  } catch (error) {
+    // La revisión no debe impedir iniciar sesión si temporalmente falla la conexión.
+    vencidosRevisados = false;
+  }
 }
 
 // =====================================================================
@@ -419,6 +817,11 @@ function crearFichaLibro(libro) {
   titulo.textContent = libro.titulo;
   ficha.appendChild(titulo);
 
+  const disponibilidad = document.createElement('span');
+  disponibilidad.className = `estado-disponibilidad ${libro.disponible === false ? 'no-disponible' : 'disponible'}`;
+  disponibilidad.textContent = libro.disponible === false ? 'Prestado · No disponible' : 'Disponible';
+  ficha.appendChild(disponibilidad);
+
   const autor = document.createElement('p');
   autor.textContent = `Autor: ${libro.autor}`;
   ficha.appendChild(autor);
@@ -456,6 +859,16 @@ function crearFichaLibro(libro) {
   if (sesion.autenticado && !modoLector) {
     const zonaGestion = document.createElement('div');
     zonaGestion.className = 'zona-gestion';
+
+    const botonPrestar = document.createElement('button');
+    botonPrestar.type = 'button';
+    botonPrestar.className = 'boton-prestar-libro';
+    botonPrestar.innerHTML = `${ICONO_PRESTAR}<span>${libro.disponible === false ? 'Prestado' : 'Prestar'}</span>`;
+    botonPrestar.disabled = libro.disponible === false;
+    if (libro.disponible !== false) {
+      botonPrestar.addEventListener('click', () => abrirPantallaPrestar(libro));
+    }
+    zonaGestion.appendChild(botonPrestar);
 
     const botonImprimir = document.createElement('button');
     botonImprimir.type = 'button';
