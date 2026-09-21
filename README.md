@@ -1,7 +1,7 @@
 # Biblin
 
 Aplicación web simple para llevar el inventario de una biblioteca. Permite
-agregar libros y buscarlos por título, autor, editorial o número de tarjeta.
+agregar libros y buscarlos por título, autor, editorial, tema, tejuelo o número de inventario.
 La interfaz está pensada para alguien sin experiencia con computadoras:
 dos botones grandes en la pantalla de inicio, formularios cortos y mensajes
 en lenguaje simple.
@@ -36,6 +36,15 @@ de tu distribución.
 
 ## 2. Configurar la aplicación
 
+Las cuentas de gestión no se guardan en PostgreSQL. Se configuran manualmente en el archivo `.env` mediante `BIBLIN_USERS`, usando un objeto JSON, por ejemplo:
+
+```
+BIBLIN_USERS={"admin":"clave1","biblioteca":"clave2"}
+```
+
+El acceso **Solo lector** no requiere cuenta. Con una sesión iniciada se habilitan las funciones de gestión y la impresión de tarjetas.
+
+
 ```bash
 cp .env.example .env
 ```
@@ -59,15 +68,9 @@ misma máquina, abrí `http://localhost:3000` en el navegador.
 
 ## Cómo funciona para quien la usa
 
-- **Agregar un libro**: pide título, autor, editorial (opcional), número de
-  tarjeta y, opcionalmente, un PDF con la versión digitalizada. El número de
-  tarjeta se sugiere solo (el siguiente libre), pero se puede cambiar. Al
-  guardar, el formulario se limpia para cargar el siguiente libro sin tener
-  que volver atrás.
-- **Buscar un libro**: un solo campo de búsqueda que revisa título, autor,
-  editorial y número de tarjeta al mismo tiempo, para no obligar a elegir
-  dónde buscar. Dejarlo vacío y tocar "Buscar" muestra todos los libros
-  ordenados alfabéticamente.
+- **Agregar un libro**: pide título, autor, editorial (opcional), tema, tejuelo, número de inventario y, opcionalmente, un PDF con la versión digitalizada. El tejuelo acepta letras y números; el número de inventario solo acepta números. El inventario se sugiere automáticamente con el siguiente número disponible.
+- **Buscar un libro**: un solo campo de búsqueda que revisa título, autor, editorial, tema, tejuelo y número de inventario al mismo tiempo. Dejarlo vacío y tocar "Buscar" muestra todos los libros ordenados alfabéticamente.
+- Con una sesión iniciada, cada resultado permite seleccionar libros individualmente o todos juntos para generar un PDF de tarjetas. También existe un botón para generar las tres tarjetas de un libro directamente. La generación del PDF se realiza en el navegador, no en el servidor.
 - Cada resultado tiene:
   - **Ver PDF** (si el libro ya tiene uno cargado): lo abre en una pestaña
     nueva del navegador.

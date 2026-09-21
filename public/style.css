@@ -471,3 +471,234 @@ main {
   background: var(--papel);
   color: var(--verde);
 }
+
+/* ---------- Selección e impresión de tarjetas ---------- */
+.controles-seleccion {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.selector-todos {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.selector-todos input,
+.selector-libro {
+  width: 21px;
+  height: 21px;
+  accent-color: var(--verde);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.contador-seleccion {
+  color: var(--tinta-suave);
+  font-size: 16px;
+  margin-right: auto;
+}
+
+.boton-imprimir-seleccionados,
+.boton-imprimir-libro {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.boton-imprimir-seleccionados {
+  padding: 10px 15px;
+  background: var(--verde);
+  color: #fff;
+}
+
+.boton-imprimir-seleccionados:hover:not(:disabled) {
+  background: var(--verde-oscuro);
+}
+
+.boton-imprimir-seleccionados:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.boton-imprimir-libro {
+  padding: 9px 14px;
+  background: none;
+  border: 1.5px solid var(--verde);
+  color: var(--verde);
+}
+
+.boton-imprimir-libro:hover {
+  background: var(--exito-fondo);
+}
+
+.boton-imprimir-libro svg {
+  width: 15px;
+  height: 15px;
+}
+
+.icono-boton {
+  display: inline-flex;
+  align-items: center;
+}
+
+.selector-libro-contenedor {
+  position: absolute;
+  top: 13px;
+  right: 14px;
+  z-index: 1;
+}
+
+.ficha-libro {
+  position: relative;
+}
+
+.controles-seleccion + #resultados {
+  margin-top: 16px;
+}
+
+.impresion-procesando {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(34, 31, 23, 0.28);
+  pointer-events: none;
+}
+
+.impresion-procesando span {
+  padding: 14px 20px;
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--tinta);
+  box-shadow: 0 8px 30px rgba(34, 31, 23, 0.18);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.contenedor-generacion-tarjetas {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.hoja-tarjetas {
+  position: relative;
+  width: 210mm;
+  height: 297mm;
+  overflow: hidden;
+  background: #fff;
+}
+
+.tarjeta-impresion {
+  position: absolute;
+  width: 60mm;
+  height: 40mm;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 0.45mm solid var(--tinta);
+  border-top: 1.2mm solid var(--verde);
+  border-radius: 1.3mm;
+  background: #fff;
+  color: var(--tinta);
+  font-family: 'Atkinson Hyperlegible', Arial, sans-serif;
+  font-size: 9.2pt;
+  line-height: 1.12;
+}
+
+.tarjeta-principal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.tarjeta-autor-directo {
+  flex-shrink: 0;
+  padding: 1.5mm 0.8mm 0 0;
+  font-size: 10.8pt;
+  line-height: 1.04;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.tarjeta-contenido {
+  min-height: 0;
+  padding: 1.5mm 2.4mm 1.8mm;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65mm;
+}
+
+.tarjeta-linea {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.tarjeta-etiqueta {
+  font-weight: 700;
+}
+
+.tarjeta-titulo,
+.tarjeta-titulo-principal,
+.tarjeta-tema-principal {
+  font-weight: 700;
+  color: var(--verde);
+}
+
+.tarjeta-titulo-principal {
+  font-size: 10.9pt;
+  line-height: 1.06;
+}
+
+.tarjeta-tema-principal {
+  font-size: 10.1pt;
+  line-height: 1.05;
+}
+
+.tarjeta-variante-2 .tarjeta-contenido,
+.tarjeta-variante-3 .tarjeta-contenido {
+  padding-top: 2.2mm;
+}
+
+@media (max-width: 600px) {
+  .controles-seleccion {
+    align-items: stretch;
+  }
+
+  .contador-seleccion {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .boton-imprimir-seleccionados {
+    width: 100%;
+  }
+
+  .zona-gestion {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

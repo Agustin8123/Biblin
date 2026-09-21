@@ -170,11 +170,24 @@
       <button type="submit">Buscar</button>
     </form>
 
+    <div id="controles-seleccion" class="controles-seleccion oculta">
+      <label class="selector-todos">
+        <input type="checkbox" id="seleccionar-todos">
+        <span>Seleccionar todos</span>
+      </label>
+      <span id="contador-seleccion" class="contador-seleccion">0 seleccionados</span>
+      <button type="button" id="btn-imprimir-seleccionados" class="boton-imprimir-seleccionados" disabled>
+        <span class="icono-boton">Imprimir tarjetas</span>
+      </button>
+    </div>
+
     <div id="resultados" aria-live="polite"></div>
   </section>
 
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

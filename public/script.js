@@ -4,6 +4,7 @@ const ICONO_BASURA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const ICONO_DOCUMENTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/></svg>';
 const ICONO_SUBIR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>';
 const ICONO_LAPIZ = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const ICONO_IMPRIMIR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/><circle cx="18" cy="12" r="1" fill="currentColor" stroke="none"/></svg>';
 
 const pantallas = {
   inicio: document.getElementById('pantalla-inicio'),
@@ -19,6 +20,7 @@ let sesion = {
 
 let modoLector = true;
 let libroEditandoId = null;
+let librosActuales = [];
 
 function mostrarPantalla(nombre) {
   Object.values(pantallas).forEach((p) => p.classList.add('oculta'));
@@ -322,6 +324,24 @@ formAgregar.addEventListener('submit', async (evento) => {
 const formBuscar = document.getElementById('form-buscar');
 const campoBusqueda = document.getElementById('campo-busqueda');
 const resultados = document.getElementById('resultados');
+const controlesSeleccion = document.getElementById('controles-seleccion');
+const seleccionarTodos = document.getElementById('seleccionar-todos');
+const contadorSeleccion = document.getElementById('contador-seleccion');
+const botonImprimirSeleccionados = document.getElementById('btn-imprimir-seleccionados');
+
+seleccionarTodos.addEventListener('change', () => {
+  const checks = resultados.querySelectorAll('.selector-libro');
+  checks.forEach((check) => {
+    check.checked = seleccionarTodos.checked;
+  });
+  actualizarControlesSeleccion();
+});
+
+botonImprimirSeleccionados.addEventListener('click', () => {
+  const librosSeleccionados = obtenerLibrosSeleccionados();
+  if (librosSeleccionados.length === 0) return;
+  generarPdfTarjetas(librosSeleccionados);
+});
 
 formBuscar.addEventListener('submit', (evento) => {
   evento.preventDefault();
@@ -330,6 +350,7 @@ formBuscar.addEventListener('submit', (evento) => {
 
 async function buscarLibros(texto) {
   resultados.innerHTML = '';
+  controlesSeleccion.classList.add('oculta');
   const cargando = document.createElement('p');
   cargando.className = 'estado-vacio';
   cargando.textContent = 'Buscando…';
@@ -359,20 +380,40 @@ function mostrarEstadoVacio(texto) {
 
 function pintarResultados(libros) {
   resultados.innerHTML = '';
+  librosActuales = Array.isArray(libros) ? libros : [];
+  resetearControlesSeleccion();
 
-  if (libros.length === 0) {
+  if (librosActuales.length === 0) {
+    controlesSeleccion.classList.add('oculta');
     mostrarEstadoVacio('No encontramos ningún libro con ese dato. Probá escribiendo menos letras.');
     return;
   }
 
-  libros.forEach((libro) => {
+  librosActuales.forEach((libro) => {
     resultados.appendChild(crearFichaLibro(libro));
   });
+
+  actualizarControlesSeleccion();
 }
 
 function crearFichaLibro(libro) {
   const ficha = document.createElement('article');
   ficha.className = 'ficha-libro';
+
+  if (sesion.autenticado && !modoLector) {
+    const selector = document.createElement('div');
+    selector.className = 'selector-libro-contenedor';
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'selector-libro';
+    check.dataset.libroId = String(libro.id);
+    check.setAttribute('aria-label', `Seleccionar ${libro.titulo}`);
+    check.addEventListener('change', actualizarControlesSeleccion);
+
+    selector.appendChild(check);
+    ficha.appendChild(selector);
+  }
 
   const titulo = document.createElement('h3');
   titulo.textContent = libro.titulo;
@@ -415,6 +456,13 @@ function crearFichaLibro(libro) {
   if (sesion.autenticado && !modoLector) {
     const zonaGestion = document.createElement('div');
     zonaGestion.className = 'zona-gestion';
+
+    const botonImprimir = document.createElement('button');
+    botonImprimir.type = 'button';
+    botonImprimir.className = 'boton-imprimir-libro';
+    botonImprimir.innerHTML = `${ICONO_IMPRIMIR}<span>Tarjetas</span>`;
+    botonImprimir.addEventListener('click', () => generarPdfTarjetas([libro]));
+    zonaGestion.appendChild(botonImprimir);
 
     const botonEditar = document.createElement('button');
     botonEditar.type = 'button';
@@ -569,6 +617,206 @@ async function borrarLibro(id, titulo) {
   } catch (error) {
     window.alert('No hay conexión con el servidor.');
   }
+}
+
+function resetearControlesSeleccion() {
+  seleccionarTodos.checked = false;
+  seleccionarTodos.indeterminate = false;
+  contadorSeleccion.textContent = '0 seleccionados';
+  botonImprimirSeleccionados.disabled = true;
+  controlesSeleccion.classList.toggle('oculta', !(sesion.autenticado && !modoLector));
+}
+
+function obtenerLibrosSeleccionados() {
+  const ids = Array.from(resultados.querySelectorAll('.selector-libro:checked'))
+    .map((check) => Number(check.dataset.libroId))
+    .filter((id) => Number.isInteger(id));
+
+  return ids
+    .map((id) => librosActuales.find((libro) => Number(libro.id) === id))
+    .filter(Boolean);
+}
+
+function actualizarControlesSeleccion() {
+  const checks = Array.from(resultados.querySelectorAll('.selector-libro'));
+  if (!sesion.autenticado || modoLector || checks.length === 0) {
+    resetearControlesSeleccion();
+    return;
+  }
+
+  const seleccionados = checks.filter((check) => check.checked).length;
+  const todos = seleccionados === checks.length;
+
+  seleccionarTodos.checked = todos;
+  seleccionarTodos.indeterminate = seleccionados > 0 && !todos;
+  contadorSeleccion.textContent = `${seleccionados} seleccionado${seleccionados === 1 ? '' : 's'}`;
+  botonImprimirSeleccionados.disabled = seleccionados === 0;
+  controlesSeleccion.classList.remove('oculta');
+}
+
+async function cargarFuentesParaTarjetas() {
+  if (document.fonts && document.fonts.ready) {
+    await document.fonts.ready;
+  }
+}
+
+function escaparTextoTarjeta(valor) {
+  return String(valor ?? '').trim();
+}
+
+function crearTarjetaImpresion(libro, variante) {
+  const tarjeta = document.createElement('article');
+  tarjeta.className = `tarjeta-impresion tarjeta-variante-${variante}`;
+
+  const principal = document.createElement('div');
+  principal.className = 'tarjeta-principal';
+
+  const contenido = document.createElement('div');
+  contenido.className = 'tarjeta-contenido';
+
+  const agregarLinea = (label, valor, clase = '') => {
+    if (!valor) return;
+    const linea = document.createElement('div');
+    linea.className = `tarjeta-linea ${clase}`.trim();
+
+    if (label) {
+      const etiqueta = document.createElement('span');
+      etiqueta.className = 'tarjeta-etiqueta';
+      etiqueta.textContent = `${label}: `;
+      linea.appendChild(etiqueta);
+    }
+
+    const texto = document.createElement('span');
+    texto.textContent = escaparTextoTarjeta(valor);
+    linea.appendChild(texto);
+    contenido.appendChild(linea);
+  };
+
+  if (variante === 1) {
+    const autor = document.createElement('div');
+    autor.className = 'tarjeta-autor-directo';
+    autor.textContent = escaparTextoTarjeta(libro.autor);
+    principal.appendChild(autor);
+
+    agregarLinea('', libro.titulo, 'tarjeta-titulo-principal');
+    agregarLinea('Tema', libro.tema);
+    agregarLinea('Editorial', libro.editorial);
+    agregarLinea('Tejuelo', libro.numero_tarjeta);
+  } else if (variante === 2) {
+    agregarLinea('', libro.titulo, 'tarjeta-titulo-principal');
+    agregarLinea('Autor', libro.autor);
+    agregarLinea('Tema', libro.tema);
+    agregarLinea('Editorial', libro.editorial);
+    agregarLinea('Tejuelo', libro.numero_tarjeta);
+  } else {
+    agregarLinea('', libro.tema, 'tarjeta-tema-principal');
+    agregarLinea('', libro.titulo, 'tarjeta-titulo-principal');
+    agregarLinea('Autor', libro.autor);
+    agregarLinea('Editorial', libro.editorial);
+    agregarLinea('Tejuelo', libro.numero_tarjeta);
+  }
+
+  principal.appendChild(contenido);
+  tarjeta.appendChild(principal);
+  return tarjeta;
+}
+
+function crearHojaTarjetas(grupoLibros) {
+  const hoja = document.createElement('div');
+  hoja.className = 'hoja-tarjetas';
+
+  const columnas = [7, 75, 143];
+  const filas = [12, 56, 100, 144, 188, 232];
+
+  grupoLibros.forEach((libro, indice) => {
+    const fila = indice;
+    const tarjetas = [1, 2, 3];
+    tarjetas.forEach((variante, columna) => {
+      const tarjeta = crearTarjetaImpresion(libro, variante);
+      tarjeta.style.left = `${columnas[columna]}mm`;
+      tarjeta.style.top = `${filas[fila]}mm`;
+      hoja.appendChild(tarjeta);
+    });
+  });
+
+  return hoja;
+}
+
+async function generarPdfTarjetas(libros) {
+  if (!sesion.autenticado || modoLector) return;
+  if (!Array.isArray(libros) || libros.length === 0) return;
+
+  if (!window.html2canvas || !window.jspdf?.jsPDF) {
+    window.alert('No se pudo cargar el generador de PDF. Revisá la conexión e intentá nuevamente.');
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'impresion-procesando';
+  overlay.innerHTML = '<span>Preparando tarjetas…</span>';
+  document.body.appendChild(overlay);
+
+  try {
+    await cargarFuentesParaTarjetas();
+
+    const contenedor = document.createElement('div');
+    contenedor.className = 'contenedor-generacion-tarjetas';
+    document.body.appendChild(contenedor);
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+      compress: true,
+    });
+
+    const porPagina = 6;
+
+    for (let inicio = 0; inicio < libros.length; inicio += porPagina) {
+      const grupo = libros.slice(inicio, inicio + porPagina);
+      const hoja = crearHojaTarjetas(grupo);
+      contenedor.innerHTML = '';
+      contenedor.appendChild(hoja);
+
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const canvas = await window.html2canvas(hoja, {
+        scale: 2,
+        backgroundColor: '#FFFFFF',
+        useCORS: true,
+        logging: false,
+        width: hoja.offsetWidth,
+        height: hoja.offsetHeight,
+      });
+
+      if (inicio > 0) pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 210, 297, undefined, 'FAST');
+    }
+
+    const fecha = new Date().toISOString().slice(0, 10);
+    const nombre = libros.length === 1
+      ? `tarjetas-${sanearNombreArchivo(libros[0].titulo)}.pdf`
+      : `tarjetas-biblin-${fecha}.pdf`;
+
+    pdf.save(nombre);
+  } catch (error) {
+    console.error('Error al generar las tarjetas:', error);
+    window.alert('No se pudo generar el PDF de las tarjetas. Probá nuevamente.');
+  } finally {
+    overlay.remove();
+    document.querySelector('.contenedor-generacion-tarjetas')?.remove();
+    actualizarControlesSeleccion();
+  }
+}
+
+function sanearNombreArchivo(texto) {
+  return String(texto || 'libro')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .slice(0, 80) || 'libro';
 }
 
 actualizarEstadoSesion();
