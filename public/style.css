@@ -634,13 +634,18 @@ main {
   min-height: 0;
 }
 
-.tarjeta-autor-directo {
+.tarjeta-primer-dato {
   flex-shrink: 0;
   padding: 1.5mm 0.8mm 0 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.tarjeta-autor-directo {
   font-size: 10.8pt;
   line-height: 1.04;
   font-weight: 700;
-  overflow-wrap: anywhere;
 }
 
 .tarjeta-contenido {
@@ -676,11 +681,6 @@ main {
 .tarjeta-tema-principal {
   font-size: 10.1pt;
   line-height: 1.05;
-}
-
-.tarjeta-variante-2 .tarjeta-contenido,
-.tarjeta-variante-3 .tarjeta-contenido {
-  padding-top: 2.2mm;
 }
 
 @media (max-width: 600px) {

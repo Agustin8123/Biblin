@@ -674,6 +674,14 @@ function crearTarjetaImpresion(libro, variante) {
   const contenido = document.createElement('div');
   contenido.className = 'tarjeta-contenido';
 
+  const agregarPrincipal = (valor, clase = '') => {
+    if (!valor) return;
+    const linea = document.createElement('div');
+    linea.className = `tarjeta-primer-dato ${clase}`.trim();
+    linea.textContent = escaparTextoTarjeta(valor);
+    principal.appendChild(linea);
+  };
+
   const agregarLinea = (label, valor, clase = '') => {
     if (!valor) return;
     const linea = document.createElement('div');
@@ -693,23 +701,19 @@ function crearTarjetaImpresion(libro, variante) {
   };
 
   if (variante === 1) {
-    const autor = document.createElement('div');
-    autor.className = 'tarjeta-autor-directo';
-    autor.textContent = escaparTextoTarjeta(libro.autor);
-    principal.appendChild(autor);
-
+    agregarPrincipal(libro.autor, 'tarjeta-autor-directo');
     agregarLinea('', libro.titulo, 'tarjeta-titulo-principal');
     agregarLinea('Tema', libro.tema);
     agregarLinea('Editorial', libro.editorial);
     agregarLinea('Tejuelo', libro.numero_tarjeta);
   } else if (variante === 2) {
-    agregarLinea('', libro.titulo, 'tarjeta-titulo-principal');
+    agregarPrincipal(libro.titulo, 'tarjeta-titulo-principal');
     agregarLinea('Autor', libro.autor);
     agregarLinea('Tema', libro.tema);
     agregarLinea('Editorial', libro.editorial);
     agregarLinea('Tejuelo', libro.numero_tarjeta);
   } else {
-    agregarLinea('', libro.tema, 'tarjeta-tema-principal');
+    agregarPrincipal(libro.tema, 'tarjeta-tema-principal');
     agregarLinea('', libro.titulo, 'tarjeta-titulo-principal');
     agregarLinea('Autor', libro.autor);
     agregarLinea('Editorial', libro.editorial);
