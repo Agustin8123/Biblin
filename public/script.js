@@ -848,6 +848,14 @@ function crearFichaLibro(libro) {
     ficha.appendChild(inventario);
   }
 
+  if (sesion.autenticado && !modoLector) {
+    const visitas = document.createElement('p');
+    visitas.className = 'visitas-pdf';
+    const cantidadVisitas = Number(libro.pdf_visitas) || 0;
+    visitas.textContent = `Visitas al PDF: ${cantidadVisitas.toLocaleString('es-AR')}`;
+    ficha.appendChild(visitas);
+  }
+
   const filaAcciones = document.createElement('div');
   filaAcciones.className = 'fila-acciones';
 

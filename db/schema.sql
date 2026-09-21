@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS libros (
     editorial         VARCHAR(300),
     numero_tarjeta    VARCHAR(100) NOT NULL,
     pdf_archivo       VARCHAR(255),
+    pdf_visitas       BIGINT NOT NULL DEFAULT 0,
     creado_en         TIMESTAMPTZ NOT NULL DEFAULT now(),
     tema              VARCHAR(200),
     numero_inventario INTEGER,
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS libros (
 
 -- Para instalaciones anteriores.
 ALTER TABLE libros ADD COLUMN IF NOT EXISTS pdf_archivo VARCHAR(255);
+ALTER TABLE libros ADD COLUMN IF NOT EXISTS pdf_visitas BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE libros ADD COLUMN IF NOT EXISTS tema VARCHAR(200);
 ALTER TABLE libros ADD COLUMN IF NOT EXISTS numero_inventario INTEGER;
 

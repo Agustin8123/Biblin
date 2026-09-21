@@ -398,7 +398,7 @@ app.get('/api/libros/buscar', async (req, res) => {
     if (q) {
       resultado = await pool.query(
         `SELECT l.id, l.titulo, l.autor, l.editorial, l.tema, l.numero_tarjeta,
-                l.numero_inventario, l.creado_en,
+                l.numero_inventario, l.creado_en, l.pdf_visitas,
                 (l.pdf_archivo IS NOT NULL) AS tiene_pdf,
                 NOT EXISTS (
                   SELECT 1 FROM prestamos p
@@ -418,7 +418,7 @@ app.get('/api/libros/buscar', async (req, res) => {
     } else {
       resultado = await pool.query(
         `SELECT l.id, l.titulo, l.autor, l.editorial, l.tema, l.numero_tarjeta,
-                l.numero_inventario, l.creado_en,
+                l.numero_inventario, l.creado_en, l.pdf_visitas,
                 (l.pdf_archivo IS NOT NULL) AS tiene_pdf,
                 NOT EXISTS (
                   SELECT 1 FROM prestamos p
@@ -741,11 +741,21 @@ app.get('/api/libros/:id/pdf', async (req, res) => {
       return res.status(404).send('No se encontró el archivo PDF.');
     }
 
+    // Cada apertura correcta del PDF cuenta como una visita. El incremento se hace
+    // en PostgreSQL para que varias aperturas simultáneas no se pisen entre sí.
+    await pool.query(
+      'UPDATE libros SET pdf_visitas = pdf_visitas + 1 WHERE id = $1',
+      [id]
+    );
+
     const nombreLegible = titulo
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^\w\s-]/g, '')
       .trim() || 'libro';
 
+    // Evita que una reapertura quede resuelta solo desde la caché del navegador:
+    // queremos que cada entrada vuelva a pasar por esta ruta y sume una visita.
+    res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${nombreLegible}.pdf"`);
     fs.createReadStream(rutaArchivo).pipe(res);

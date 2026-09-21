@@ -313,6 +313,12 @@ main {
   color: var(--tinta-suave);
   font-size: 17px;
 }
+.ficha-libro .visitas-pdf {
+  margin-top: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--verde);
+}
 .fila-borrar {
   margin-top: 14px;
   display: flex;
@@ -340,6 +346,7 @@ main {
 .zona-gestion {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
 }
 .boton-editar {
@@ -365,13 +372,14 @@ main {
   margin-top: 14px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 7px;
   flex-wrap: wrap;
 }
 .zona-pdf {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   flex-wrap: wrap;
 }
@@ -700,8 +708,8 @@ main {
   }
 
   .zona-gestion {
-    width: 100%;
-    justify-content: flex-end;
+    width: auto;
+    justify-content: center;
   }
 }
 
@@ -989,7 +997,7 @@ main {
 
 .zona-gestion {
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 @media (max-width: 600px) {
