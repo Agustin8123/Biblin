@@ -88,7 +88,7 @@ function actualizarInicio() {
 
 function irABuscar(lector = !sesion.autenticado) {
   modoLector = lector || !sesion.autenticado;
-  document.querySelector('#pantalla-buscar h2').textContent = modoLector ? 'Catálogo de todas las bibliotecas' : 'Buscar en mi biblioteca';
+  document.querySelector('#pantalla-buscar h2').textContent = modoLector ? 'Buscá tu próximo libro' : 'Buscar en mi biblioteca';
   document.getElementById('indicador-lector').classList.toggle('oculta', !modoLector);
   document.getElementById('filtro-biblioteca-contenedor').classList.toggle('oculta', !modoLector);
   filtroBiblioteca.value = '';
@@ -96,7 +96,6 @@ function irABuscar(lector = !sesion.autenticado) {
   mostrarPantalla('buscar');
   campoBusqueda.value = '';
   buscarLibros('');
-  campoBusqueda.focus();
 }
 
 // =====================================================================
@@ -820,7 +819,7 @@ async function buscarLibros(texto) {
       mostrarEstadoVacio(datos.error || 'No se pudo hacer la búsqueda.');
       return;
     }
-    pintarResultados(datos.libros);
+    pintarResultados(datos.libros, texto);
   } catch (error) {
     if (!sigueVigente()) return;
     mostrarEstadoVacio('No hay conexión con el servidor. Revisá internet e intentá de nuevo.');
@@ -835,14 +834,30 @@ function mostrarEstadoVacio(texto) {
   resultados.appendChild(p);
 }
 
-function pintarResultados(libros) {
+function pintarResultados(libros, texto = campoBusqueda.value.trim()) {
   resultados.innerHTML = '';
   librosActuales = Array.isArray(libros) ? libros : [];
   resetearControlesSeleccion();
 
   if (librosActuales.length === 0) {
     controlesSeleccion.classList.add('oculta');
-    mostrarEstadoVacio('No encontramos ningún libro con ese dato. Probá escribiendo menos letras.');
+    const estado = document.createElement('div');
+    estado.className = 'catalogo-vacio';
+    const icono = document.createElement('span');
+    icono.className = 'catalogo-vacio-icono';
+    icono.innerHTML = ICONO_DOCUMENTO;
+    const titulo = document.createElement('h3');
+    const detalle = document.createElement('p');
+    const escuelaElegida = modoLector && filtroBiblioteca.value;
+    titulo.textContent = texto ? 'No encontramos ese libro' : 'Todavía no hay libros cargados';
+    detalle.textContent = texto
+      ? 'Probá con otro título o autor, o elegí otra escuela.'
+      : escuelaElegida
+        ? 'Esta escuela aún no agregó libros. Podés consultar las otras bibliotecas.'
+        : 'Cuando las bibliotecas agreguen sus libros, los vas a encontrar acá.';
+    if (!modoLector) detalle.textContent = texto ? 'Probá con otro título o autor.' : 'Agregá el primer libro desde el inicio para verlo acá.';
+    estado.append(icono, titulo, detalle);
+    resultados.appendChild(estado);
     return;
   }
 

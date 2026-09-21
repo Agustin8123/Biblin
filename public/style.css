@@ -734,7 +734,9 @@ main {
 }
 
 .filtro-biblioteca {
-  margin-bottom: 18px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--borde);
 }
 
 .filtro-biblioteca label {
@@ -746,7 +748,7 @@ main {
 .filtro-biblioteca select {
   display: block;
   width: 100%;
-  max-width: 26rem;
+  max-width: 100%;
   min-width: 0;
   padding: 10px 12px;
   font-size: 18px;
@@ -755,6 +757,97 @@ main {
   border: 2px solid var(--borde);
   border-radius: var(--radio);
   text-overflow: ellipsis;
+}
+
+#pantalla-buscar h2 {
+  margin: 8px 0 8px;
+  line-height: 1.25;
+}
+
+.indicador-lector {
+  margin: 0 0 24px;
+  color: var(--tinta-suave);
+  font-size: 18px;
+}
+
+.panel-busqueda {
+  margin-top: 22px;
+  padding: 24px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-grande);
+}
+
+#form-buscar {
+  gap: 8px;
+}
+
+#form-buscar label {
+  font-weight: 700;
+}
+
+.entrada-busqueda {
+  display: flex;
+  gap: 10px;
+}
+
+.entrada-busqueda #campo-busqueda {
+  min-width: 0;
+  flex: 1;
+  padding: 12px;
+  font-size: 18px;
+}
+
+.entrada-busqueda button {
+  padding: 12px 22px;
+  border-radius: var(--radio);
+  font-size: 18px;
+}
+
+.ayuda-busqueda {
+  margin: 0;
+  font-size: 15px;
+  color: var(--tinta-suave);
+  line-height: 1.5;
+}
+
+.catalogo-vacio {
+  padding: 28px 20px;
+  text-align: center;
+  border: 1px dashed var(--borde);
+  border-radius: var(--radio-grande);
+}
+
+.catalogo-vacio-icono {
+  display: inline-flex;
+  padding: 12px;
+  border-radius: 50%;
+  background: #EFECE3;
+  color: var(--tinta-suave);
+}
+
+.catalogo-vacio-icono svg {
+  width: 28px;
+  height: 28px;
+}
+
+.catalogo-vacio h3 {
+  margin: 12px 0 6px;
+  font-size: 20px;
+}
+
+.catalogo-vacio p {
+  max-width: 420px;
+  margin: 0 auto;
+  color: var(--tinta-suave);
+  font-size: 17px;
+}
+
+@media (max-width: 480px) {
+  .panel-busqueda { padding: 18px; }
+  .entrada-busqueda { flex-direction: column; }
+  .entrada-busqueda button { min-height: 48px; }
+  #pantalla-buscar h2 { font-size: 25px; }
 }
 
 .ficha-libro .biblioteca-libro {
