@@ -58,6 +58,7 @@ async function actualizarEstadoSesion() {
     sesion = {
       autenticado: Boolean(datos.autenticado),
       usuario: datos.usuario || null,
+      biblioteca: datos.biblioteca || null,
     };
   } catch (error) {
     sesion = { autenticado: false, usuario: null };
@@ -76,7 +77,7 @@ function actualizarInicio() {
     inicioPublico.classList.add('oculta');
     inicioAdmin.classList.remove('oculta');
     barraSesion.classList.remove('oculta');
-    textoSesion.textContent = `Sesión iniciada como ${sesion.usuario}`;
+    textoSesion.textContent = `${sesion.biblioteca?.nombre || 'Mi biblioteca'} · ${sesion.usuario}`;
   } else {
     inicioPublico.classList.remove('oculta');
     inicioAdmin.classList.add('oculta');
@@ -86,8 +87,12 @@ function actualizarInicio() {
 }
 
 function irABuscar(lector = !sesion.autenticado) {
-  modoLector = lector && !sesion.autenticado;
+  modoLector = lector || !sesion.autenticado;
+  document.querySelector('#pantalla-buscar h2').textContent = modoLector ? 'Catálogo de todas las bibliotecas' : 'Buscar en mi biblioteca';
   document.getElementById('indicador-lector').classList.toggle('oculta', !modoLector);
+  document.getElementById('filtro-biblioteca-contenedor').classList.toggle('oculta', !modoLector);
+  filtroBiblioteca.value = '';
+  if (modoLector) cargarBibliotecas();
   mostrarPantalla('buscar');
   campoBusqueda.value = '';
   buscarLibros('');
@@ -99,6 +104,7 @@ function irABuscar(lector = !sesion.autenticado) {
 // =====================================================================
 
 document.getElementById('btn-solo-lector').addEventListener('click', () => irABuscar(true));
+document.getElementById('btn-catalogo-publico').addEventListener('click', () => irABuscar(true));
 
 document.getElementById('btn-ir-login').addEventListener('click', () => {
   mostrarPantalla('login');
@@ -165,7 +171,7 @@ formLogin.addEventListener('submit', async (evento) => {
     }
 
     campoClave.value = '';
-    sesion = { autenticado: true, usuario: datos.usuario };
+    sesion = { autenticado: true, usuario: datos.usuario, biblioteca: datos.biblioteca };
     modoLector = false;
     actualizarInicio();
     mostrarPantalla('inicio');
@@ -296,8 +302,14 @@ function abrirPantallaPrestamos() {
 async function buscarLibrosParaPrestamo(texto) {
   resultadosPrestamo.innerHTML = '<p class="estado-vacio">Buscando…</p>';
   try {
-    const respuesta = await fetch(`/api/libros/buscar?q=${encodeURIComponent(texto)}`);
+    const respuesta = await fetch(`/api/libros/buscar?q=${encodeURIComponent(texto)}&catalogo=gestion`, { cache: 'no-store' });
     const datos = await respuesta.json();
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      mostrarPantalla('login');
+      return;
+    }
     if (!datos.ok) {
       resultadosPrestamo.innerHTML = `<p class="estado-vacio">${datos.error || 'No se pudo buscar.'}</p>`;
       return;
@@ -726,6 +738,40 @@ const controlesSeleccion = document.getElementById('controles-seleccion');
 const seleccionarTodos = document.getElementById('seleccionar-todos');
 const contadorSeleccion = document.getElementById('contador-seleccion');
 const botonImprimirSeleccionados = document.getElementById('btn-imprimir-seleccionados');
+const filtroBiblioteca = document.getElementById('filtro-biblioteca');
+const errorBibliotecas = document.getElementById('error-bibliotecas');
+const reintentarBibliotecas = document.getElementById('btn-reintentar-bibliotecas');
+let ultimaBusqueda = 0;
+let ultimaCargaBibliotecas = 0;
+
+async function cargarBibliotecas() {
+  const carga = ++ultimaCargaBibliotecas;
+  filtroBiblioteca.disabled = true;
+  errorBibliotecas.classList.add('oculta');
+  reintentarBibliotecas.classList.add('oculta');
+  try {
+    const respuesta = await fetch('/api/bibliotecas', { cache: 'no-store' });
+    const datos = await respuesta.json();
+    if (carga !== ultimaCargaBibliotecas) return;
+    if (!respuesta.ok || !datos.ok) throw new Error('No se pudieron cargar las bibliotecas.');
+    const seleccion = filtroBiblioteca.value;
+    filtroBiblioteca.replaceChildren(new Option('Todas las bibliotecas', ''));
+    datos.bibliotecas.forEach((biblioteca) => {
+      filtroBiblioteca.add(new Option(biblioteca.nombre, String(biblioteca.id)));
+    });
+    filtroBiblioteca.value = seleccion;
+    if (filtroBiblioteca.selectedIndex < 0) filtroBiblioteca.value = '';
+  } catch (error) {
+    if (carga !== ultimaCargaBibliotecas) return;
+    errorBibliotecas.classList.remove('oculta');
+    reintentarBibliotecas.classList.remove('oculta');
+  } finally {
+    if (carga === ultimaCargaBibliotecas) filtroBiblioteca.disabled = false;
+  }
+}
+
+reintentarBibliotecas.addEventListener('click', cargarBibliotecas);
+filtroBiblioteca.addEventListener('change', () => buscarLibros(campoBusqueda.value.trim()));
 
 seleccionarTodos.addEventListener('change', () => {
   const checks = resultados.querySelectorAll('.selector-libro');
@@ -747,6 +793,10 @@ formBuscar.addEventListener('submit', (evento) => {
 });
 
 async function buscarLibros(texto) {
+  const busqueda = ++ultimaBusqueda;
+  const sesionBusqueda = sesion;
+  const lectorBusqueda = modoLector;
+  const sigueVigente = () => busqueda === ultimaBusqueda && sesionBusqueda === sesion && lectorBusqueda === modoLector;
   resultados.innerHTML = '';
   controlesSeleccion.classList.add('oculta');
   const cargando = document.createElement('p');
@@ -755,15 +805,24 @@ async function buscarLibros(texto) {
   resultados.appendChild(cargando);
 
   try {
-    const respuesta = await fetch(`/api/libros/buscar?q=${encodeURIComponent(texto)}`);
+    const filtro = modoLector && filtroBiblioteca.value ? `&biblioteca_id=${encodeURIComponent(filtroBiblioteca.value)}` : '';
+    const respuesta = await fetch(`/api/libros/buscar?q=${encodeURIComponent(texto)}&catalogo=${modoLector ? 'publico' : 'gestion'}${filtro}`, { cache: 'no-store' });
     const datos = await respuesta.json();
+    if (!sigueVigente()) return;
 
+    if (respuesta.status === 401) {
+      sesion = { autenticado: false, usuario: null };
+      actualizarInicio();
+      mostrarPantalla('login');
+      return;
+    }
     if (!datos.ok) {
       mostrarEstadoVacio(datos.error || 'No se pudo hacer la búsqueda.');
       return;
     }
     pintarResultados(datos.libros);
   } catch (error) {
+    if (!sigueVigente()) return;
     mostrarEstadoVacio('No hay conexión con el servidor. Revisá internet e intentá de nuevo.');
   }
 }
@@ -821,6 +880,11 @@ function crearFichaLibro(libro) {
   disponibilidad.className = `estado-disponibilidad ${libro.disponible === false ? 'no-disponible' : 'disponible'}`;
   disponibilidad.textContent = libro.disponible === false ? 'Prestado · No disponible' : 'Disponible';
   ficha.appendChild(disponibilidad);
+
+  const biblioteca = document.createElement('p');
+  biblioteca.className = 'biblioteca-libro';
+  biblioteca.textContent = `Biblioteca: ${libro.biblioteca_nombre}`;
+  ficha.appendChild(biblioteca);
 
   const autor = document.createElement('p');
   autor.textContent = `Autor: ${libro.autor}`;

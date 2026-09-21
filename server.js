@@ -38,7 +38,7 @@ app.use(express.json({ limit: '100kb' }));
 // Autenticación basada en sesiones.
 // Las cuentas viven exclusivamente en .env y NO en PostgreSQL.
 // Ejemplo:
-// BIBLIN_USERS={"admin":"clave1","biblioteca":"clave2"}
+// BIBLIN_USERS={"admin":{"clave":"clave1","biblioteca_id":1}}
 // ---------------------------------------------------------------------------
 function cargarCuentas() {
   const bruto = String(process.env.BIBLIN_USERS || '').trim();
@@ -50,10 +50,15 @@ function cargarCuentas() {
       throw new Error('BIBLIN_USERS debe ser un objeto JSON.');
     }
 
-    const resultado = {};
-    for (const [usuario, clave] of Object.entries(cuentas)) {
-      if (!usuario.trim() || typeof clave !== 'string') continue;
-      resultado[usuario] = clave;
+    const resultado = Object.create(null);
+    for (const [usuario, valor] of Object.entries(cuentas)) {
+      // Las cuentas antiguas conservan acceso a la biblioteca inicial.
+      const cuenta = typeof valor === 'string' ? { clave: valor, biblioteca_id: 1 } : valor;
+      if (!usuario.trim() || !cuenta || typeof cuenta.clave !== 'string' ||
+          !Number.isSafeInteger(cuenta.biblioteca_id) || cuenta.biblioteca_id <= 0) {
+        throw new Error('Cada cuenta necesita clave y biblioteca_id entero positivo.');
+      }
+      resultado[usuario] = { clave: cuenta.clave, biblioteca_id: cuenta.biblioteca_id };
     }
     return resultado;
   } catch (error) {
@@ -181,10 +186,11 @@ app.get('/api/auth/estado', (req, res) => {
     ok: true,
     autenticado: Boolean(sesion),
     usuario: sesion ? sesion.usuario : null,
+    biblioteca: sesion ? sesion.biblioteca : null,
   });
 });
 
-app.post('/api/auth/login', limitadorLogin, (req, res) => {
+app.post('/api/auth/login', limitadorLogin, async (req, res) => {
   if (Object.keys(CUENTAS).length === 0) {
     return res.status(503).json({
       ok: false,
@@ -195,20 +201,30 @@ app.post('/api/auth/login', limitadorLogin, (req, res) => {
   const usuario = typeof req.body?.usuario === 'string' ? req.body.usuario.trim() : '';
   const clave = typeof req.body?.clave === 'string' ? req.body.clave : '';
   const claveGuardada = Object.prototype.hasOwnProperty.call(CUENTAS, usuario)
-    ? CUENTAS[usuario]
+    ? CUENTAS[usuario].clave
     : '';
 
   if (!usuario || !clave || !claveGuardada || !compararSeguro(clave, claveGuardada)) {
     return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos.' });
   }
 
+  let biblioteca;
+  try {
+    const resultado = await pool.query('SELECT id, nombre FROM bibliotecas WHERE id = $1', [CUENTAS[usuario].biblioteca_id]);
+    biblioteca = resultado.rows[0];
+    if (!biblioteca) return res.status(503).json({ ok: false, error: 'La cuenta no tiene una biblioteca configurada. Contactá al administrador.' });
+  } catch (error) {
+    console.error('Error al consultar la biblioteca:', error);
+    return res.status(503).json({ ok: false, error: 'No se pudo consultar la biblioteca. Probá de nuevo en un momento.' });
+  }
   const token = crypto.randomBytes(32).toString('hex');
   SESIONES.set(token, {
     usuario,
+    biblioteca,
     expira: Date.now() + DURACION_SESION_MS,
   });
   establecerCookieSesion(res, req, token);
-  res.json({ ok: true, usuario });
+  res.json({ ok: true, usuario, biblioteca });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -338,7 +354,8 @@ app.get('/api/libros/siguiente-inventario', exigirLogin, async (req, res) => {
   try {
     const resultado = await pool.query(
       `SELECT COALESCE(MAX(numero_inventario), 0) + 1 AS siguiente
-       FROM libros`
+       FROM libros WHERE biblioteca_id = $1`,
+      [req.sesion.biblioteca.id]
     );
     res.json({ ok: true, siguiente: String(resultado.rows[0].siguiente) });
   } catch (error) {
@@ -365,10 +382,10 @@ app.post('/api/libros', exigirLogin, async (req, res) => {
   try {
     const resultado = await pool.query(
       `INSERT INTO libros
-         (titulo, autor, editorial, tema, numero_tarjeta, numero_inventario)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, biblioteca_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, creado_en`,
-      [titulo, autor, editorial, tema, numero_tarjeta, numero_inventario]
+      [titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, req.sesion.biblioteca.id]
     );
     res.status(201).json({ ok: true, libro: resultado.rows[0] });
   } catch (error) {
@@ -390,45 +407,58 @@ app.post('/api/libros', exigirLogin, async (req, res) => {
   }
 });
 
+app.get('/api/bibliotecas', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const resultado = await pool.query('SELECT id, nombre FROM bibliotecas ORDER BY nombre ASC, id ASC');
+    res.json({ ok: true, bibliotecas: resultado.rows });
+  } catch (error) {
+    console.error('Error al listar bibliotecas:', error);
+    res.status(500).json({ ok: false, error: 'No se pudieron cargar las bibliotecas. Probá de nuevo.' });
+  }
+});
+
 app.get('/api/libros/buscar', async (req, res) => {
   const q = comoTexto(req.query.q);
+  const filtro = req.query.biblioteca_id;
+  const bibliotecaFiltro = filtro === undefined || filtro === '' ? null : Number(filtro);
+  if (bibliotecaFiltro !== null && (typeof filtro !== 'string' || !/^[0-9]+$/.test(filtro) || !Number.isSafeInteger(bibliotecaFiltro) || bibliotecaFiltro <= 0)) {
+    return res.status(400).json({ ok: false, error: 'Elegí una biblioteca válida.' });
+  }
 
   try {
-    let resultado;
-    if (q) {
-      resultado = await pool.query(
-        `SELECT l.id, l.titulo, l.autor, l.editorial, l.tema, l.numero_tarjeta,
-                l.numero_inventario, l.creado_en, l.pdf_visitas,
-                (l.pdf_archivo IS NOT NULL) AS tiene_pdf,
-                NOT EXISTS (
-                  SELECT 1 FROM prestamos p
-                  WHERE p.libro_id = l.id AND p.fecha_devolucion IS NULL
-                ) AS disponible
-         FROM libros l
-         WHERE unaccent(l.titulo) ILIKE unaccent($1)
-            OR unaccent(l.autor) ILIKE unaccent($1)
-            OR unaccent(COALESCE(l.editorial, '')) ILIKE unaccent($1)
-            OR unaccent(COALESCE(l.tema, '')) ILIKE unaccent($1)
-            OR unaccent(l.numero_tarjeta) ILIKE unaccent($1)
-            OR unaccent(COALESCE(l.numero_inventario::text, '')) ILIKE unaccent($1)
-         ORDER BY l.titulo ASC
-         LIMIT 200`,
-        [`%${q}%`]
-      );
-    } else {
-      resultado = await pool.query(
-        `SELECT l.id, l.titulo, l.autor, l.editorial, l.tema, l.numero_tarjeta,
-                l.numero_inventario, l.creado_en, l.pdf_visitas,
-                (l.pdf_archivo IS NOT NULL) AS tiene_pdf,
-                NOT EXISTS (
-                  SELECT 1 FROM prestamos p
-                  WHERE p.libro_id = l.id AND p.fecha_devolucion IS NULL
-                ) AS disponible
-         FROM libros l
-         ORDER BY l.titulo ASC
-         LIMIT 200`
-      );
+    const sesion = obtenerSesion(req);
+    if (req.query.catalogo === 'gestion' && !sesion) {
+      return res.status(401).json({ ok: false, error: 'Necesitás iniciar sesión para gestionar tu biblioteca.' });
     }
+    // El catálogo público reúne todas las bibliotecas; la gestión usa la sesión.
+    const bibliotecaId = req.query.catalogo === 'publico' ? null : (sesion?.biblioteca.id ?? null);
+    res.setHeader('Cache-Control', 'no-store');
+    const resultado = await pool.query(
+      `SELECT l.id, l.titulo, l.autor, l.editorial, l.tema, l.numero_tarjeta,
+              l.numero_inventario, l.creado_en,
+              CASE WHEN l.biblioteca_id = $2 THEN l.pdf_visitas ELSE NULL END AS pdf_visitas,
+              l.biblioteca_id, b.nombre AS biblioteca_nombre,
+              (l.pdf_archivo IS NOT NULL) AS tiene_pdf,
+              NOT EXISTS (
+                SELECT 1 FROM prestamos p
+                WHERE p.libro_id = l.id AND p.fecha_devolucion IS NULL
+              ) AS disponible
+       FROM libros l
+       JOIN bibliotecas b ON b.id = l.biblioteca_id
+       WHERE ($2::integer IS NULL OR l.biblioteca_id = $2)
+         AND ($4::integer IS NULL OR l.biblioteca_id = $4)
+         AND ($1 = '' OR unaccent(l.titulo) ILIKE unaccent($3)
+           OR unaccent(l.autor) ILIKE unaccent($3)
+           OR unaccent(COALESCE(l.editorial, '')) ILIKE unaccent($3)
+           OR unaccent(COALESCE(l.tema, '')) ILIKE unaccent($3)
+           OR unaccent(l.numero_tarjeta) ILIKE unaccent($3)
+           OR unaccent(COALESCE(l.numero_inventario::text, '')) ILIKE unaccent($3)
+           OR unaccent(b.nombre) ILIKE unaccent($3))
+       ORDER BY l.titulo ASC, b.nombre ASC, l.id ASC
+       LIMIT 200`,
+      [q, bibliotecaId, `%${q}%`, bibliotecaFiltro]
+    );
     res.json({ ok: true, libros: resultado.rows });
   } catch (error) {
     console.error('Error al buscar libros:', error);
@@ -462,10 +492,10 @@ app.put('/api/libros/:id', exigirLogin, async (req, res) => {
       `UPDATE libros
        SET titulo = $1, autor = $2, editorial = $3, tema = $4,
            numero_tarjeta = $5, numero_inventario = $6
-       WHERE id = $7
+       WHERE id = $7 AND biblioteca_id = $8
        RETURNING id, titulo, autor, editorial, tema, numero_tarjeta, numero_inventario,
                  creado_en, (pdf_archivo IS NOT NULL) AS tiene_pdf`,
-      [titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, id]
+      [titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, id, req.sesion.biblioteca.id]
     );
     if (resultado.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Ese libro ya no está en la lista.' });
@@ -498,8 +528,8 @@ app.delete('/api/libros/:id', exigirLogin, async (req, res) => {
 
   try {
     const resultado = await pool.query(
-      'DELETE FROM libros WHERE id = $1 RETURNING id, pdf_archivo',
-      [id]
+      'DELETE FROM libros WHERE id = $1 AND biblioteca_id = $2 RETURNING id, pdf_archivo',
+      [id, req.sesion.biblioteca.id]
     );
     if (resultado.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Ese libro ya no está en la lista.' });
@@ -531,9 +561,11 @@ app.get('/api/prestamos', exigirLogin, async (req, res) => {
               l.titulo, l.autor, l.numero_tarjeta, l.numero_inventario
        FROM prestamos p
        JOIN libros l ON l.id = p.libro_id
+       WHERE l.biblioteca_id = $1
        ORDER BY (p.fecha_devolucion IS NULL) DESC,
                 COALESCE(p.fecha_devolucion, p.fecha_prestamo) DESC, p.id DESC
-       LIMIT 1000`
+       LIMIT 1000`,
+      [req.sesion.biblioteca.id]
     );
     res.json({ ok: true, prestamos: resultado.rows });
   } catch (error) {
@@ -554,9 +586,9 @@ app.get('/api/prestamos/vencidos', exigirLogin, async (req, res) => {
               l.titulo, l.autor, l.numero_tarjeta, l.numero_inventario
        FROM prestamos p
        JOIN libros l ON l.id = p.libro_id
-       WHERE p.fecha_devolucion IS NULL AND p.fecha_limite < $1::date
+       WHERE p.fecha_devolucion IS NULL AND p.fecha_limite < $1::date AND l.biblioteca_id = $2
        ORDER BY p.fecha_limite ASC, l.titulo ASC`,
-      [hoy]
+      [hoy, req.sesion.biblioteca.id]
     );
     res.json({ ok: true, prestamos: resultado.rows });
   } catch (error) {
@@ -579,8 +611,8 @@ app.post('/api/prestamos', exigirLogin, async (req, res) => {
     await cliente.query('BEGIN');
 
     const libro = await cliente.query(
-      'SELECT id, titulo FROM libros WHERE id = $1 FOR UPDATE',
-      [libro_id]
+      'SELECT id, titulo FROM libros WHERE id = $1 AND biblioteca_id = $2 FOR UPDATE',
+      [libro_id, req.sesion.biblioteca.id]
     );
     if (libro.rowCount === 0) {
       await cliente.query('ROLLBACK');
@@ -611,7 +643,7 @@ app.post('/api/prestamos', exigirLogin, async (req, res) => {
       prestamo: { ...resultado.rows[0], titulo: libro.rows[0].titulo },
     });
   } catch (error) {
-    await cliente.query('ROLLBACK').catch(() => {});
+    if (cliente) await cliente.query('ROLLBACK').catch(() => {});
     if (error.code === '23505') {
       return res.status(409).json({ ok: false, error: 'Ese libro ya está prestado y figura como no disponible.' });
     }
@@ -637,8 +669,8 @@ app.post('/api/prestamos/:id/devolver', exigirLogin, async (req, res) => {
       `SELECT fecha_devolucion,
               ($2::date < fecha_prestamo) AS devolucion_anterior
        FROM prestamos
-       WHERE id = $1`,
-      [id, fechaDevolucion]
+       WHERE id = $1 AND libro_id IN (SELECT id FROM libros WHERE biblioteca_id = $3)`,
+      [id, fechaDevolucion, req.sesion.biblioteca.id]
     );
     if (actual.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Ese préstamo ya no existe.' });
@@ -656,8 +688,9 @@ app.post('/api/prestamos/:id/devolver', exigirLogin, async (req, res) => {
       `UPDATE prestamos
        SET fecha_devolucion = $1::date, devuelto_por = $2
        WHERE id = $3 AND fecha_devolucion IS NULL
+         AND libro_id IN (SELECT id FROM libros WHERE biblioteca_id = $4)
        RETURNING id, libro_id, fecha_devolucion, devuelto_por`,
-      [fechaDevolucion, req.sesion.usuario, id]
+      [fechaDevolucion, req.sesion.usuario, id, req.sesion.biblioteca.id]
     );
 
     if (resultado.rowCount === 0) {
@@ -671,7 +704,20 @@ app.post('/api/prestamos/:id/devolver', exigirLogin, async (req, res) => {
   }
 });
 
-app.post('/api/libros/:id/pdf', exigirLogin, limitadorSubidas, (req, res) => {
+async function exigirLibroPropio(req, res, next) {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Ese libro no existe.' });
+  try {
+    const resultado = await pool.query('SELECT id FROM libros WHERE id = $1 AND biblioteca_id = $2', [id, req.sesion.biblioteca.id]);
+    if (!resultado.rowCount) return res.status(404).json({ ok: false, error: 'Ese libro no pertenece a tu biblioteca.' });
+    return next();
+  } catch (error) {
+    console.error('Error al consultar el libro:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo consultar el libro.' });
+  }
+}
+
+app.post('/api/libros/:id/pdf', exigirLogin, exigirLibroPropio, limitadorSubidas, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ ok: false, error: 'Ese libro no existe.' });
@@ -698,13 +744,13 @@ app.post('/api/libros/:id/pdf', exigirLogin, limitadorSubidas, (req, res) => {
     }
 
     try {
-      const anterior = await pool.query('SELECT pdf_archivo FROM libros WHERE id = $1', [id]);
+      const anterior = await pool.query('SELECT pdf_archivo FROM libros WHERE id = $1 AND biblioteca_id = $2', [id, req.sesion.biblioteca.id]);
       if (anterior.rows.length === 0) {
         borrarArchivo(req.file.path);
         return res.status(404).json({ ok: false, error: 'Ese libro ya no está en la lista.' });
       }
 
-      await pool.query('UPDATE libros SET pdf_archivo = $1 WHERE id = $2', [req.file.filename, id]);
+      await pool.query('UPDATE libros SET pdf_archivo = $1 WHERE id = $2 AND biblioteca_id = $3', [req.file.filename, id, req.sesion.biblioteca.id]);
       if (anterior.rows[0].pdf_archivo) {
         borrarArchivo(path.join(CARPETA_PDFS, anterior.rows[0].pdf_archivo));
       }
@@ -772,7 +818,7 @@ app.delete('/api/libros/:id/pdf', exigirLogin, async (req, res) => {
   }
 
   try {
-    const resultado = await pool.query('SELECT pdf_archivo FROM libros WHERE id = $1', [id]);
+    const resultado = await pool.query('SELECT pdf_archivo FROM libros WHERE id = $1 AND biblioteca_id = $2', [id, req.sesion.biblioteca.id]);
     if (resultado.rows.length === 0) {
       return res.status(404).json({ ok: false, error: 'Ese libro ya no está en la lista.' });
     }
@@ -780,7 +826,7 @@ app.delete('/api/libros/:id/pdf', exigirLogin, async (req, res) => {
     const pdfActual = resultado.rows[0].pdf_archivo;
     if (!pdfActual) return res.json({ ok: true });
 
-    await pool.query('UPDATE libros SET pdf_archivo = NULL WHERE id = $1', [id]);
+    await pool.query('UPDATE libros SET pdf_archivo = NULL WHERE id = $1 AND biblioteca_id = $2', [id, req.sesion.biblioteca.id]);
     borrarArchivo(path.join(CARPETA_PDFS, pdfActual));
     res.json({ ok: true });
   } catch (error) {
@@ -793,9 +839,11 @@ app.use('/api/', (req, res) => {
   res.status(404).json({ ok: false, error: 'Esa dirección no existe.' });
 });
 
-app.listen(PUERTO, '0.0.0.0', () => {
+if (require.main === module) app.listen(PUERTO, '0.0.0.0', () => {
   if (Object.keys(CUENTAS).length === 0) {
     console.warn('ADVERTENCIA: no hay cuentas configuradas en BIBLIN_USERS. Biblin funcionará en modo Solo lector hasta configurarlas.');
   }
   console.log(`Biblioteca escuchando en el puerto ${PUERTO}`);
 });
+
+module.exports = app;

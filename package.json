@@ -4,7 +4,8 @@
   "description": "Inventario simple de libros para biblioteca, con interfaz pensada para usuarios sin experiencia técnica.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "license": "MIT",
   "dependencies": {
@@ -14,5 +15,9 @@
     "helmet": "^7.1.0",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "jsdom": "^26.1.0"
   }
 }

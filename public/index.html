@@ -33,6 +33,7 @@
 
   <!-- INICIO -->
   <section id="pantalla-inicio" class="pantalla">
+    <p class="descripcion-red">Las bibliotecas de nuestras escuelas, en un solo lugar. Consultá dónde está cada libro y si está disponible.</p>
     <div id="inicio-publico" class="inicio-publico">
       <button type="button" class="boton-grande boton-buscar" id="btn-solo-lector">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
@@ -87,6 +88,9 @@
           <path d="M8 15h6"/>
         </svg>
         <span>Préstamos y devoluciones</span>
+      </button>
+      <button type="button" class="boton-grande boton-buscar" id="btn-catalogo-publico">
+        <span>Consultar todas las bibliotecas</span>
       </button>
     </div>
   </section>
@@ -245,10 +249,19 @@
     </button>
     <h2>Buscar un libro</h2>
 
-    <div id="indicador-lector" class="indicador-lector oculta">Modo solo lector</div>
+    <div id="indicador-lector" class="indicador-lector oculta">Solo lector · Libros de todas las bibliotecas</div>
+
+    <div id="filtro-biblioteca-contenedor" class="filtro-biblioteca oculta">
+      <label for="filtro-biblioteca">Biblioteca de la escuela</label>
+      <select id="filtro-biblioteca">
+        <option value="">Todas las bibliotecas</option>
+      </select>
+      <p id="error-bibliotecas" class="oculta" role="status">No se pudieron cargar las escuelas. Podés buscar en todas las bibliotecas.</p>
+      <button type="button" id="btn-reintentar-bibliotecas" class="boton-secundario oculta">Volver a cargar escuelas</button>
+    </div>
 
     <form id="form-buscar" class="fila-busqueda">
-      <input type="text" id="campo-busqueda" placeholder="Título, autor, editorial, tema, tejuelo o inventario" autocomplete="off">
+      <input type="text" id="campo-busqueda" aria-label="Buscar libros o bibliotecas" placeholder="Título, autor, biblioteca, tema, tejuelo o inventario" autocomplete="off">
       <button type="submit">Buscar</button>
     </form>
 

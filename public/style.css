@@ -35,12 +35,13 @@ body {
   line-height: 1.5;
 }
 
-button, input {
+button, input, select {
   font-family: inherit;
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 3px solid var(--foco);
   outline-offset: 2px;
 }
@@ -725,6 +726,41 @@ main {
 }
 .boton-prestamos:hover {
   background: #45355C;
+}
+
+.descripcion-red {
+  color: var(--tinta-suave);
+  margin: 0 0 24px;
+}
+
+.filtro-biblioteca {
+  margin-bottom: 18px;
+}
+
+.filtro-biblioteca label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.filtro-biblioteca select {
+  display: block;
+  width: 100%;
+  max-width: 26rem;
+  min-width: 0;
+  padding: 10px 12px;
+  font-size: 18px;
+  color: var(--tinta);
+  background: var(--superficie);
+  border: 2px solid var(--borde);
+  border-radius: var(--radio);
+  text-overflow: ellipsis;
+}
+
+.ficha-libro .biblioteca-libro {
+  color: var(--verde);
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .estado-disponibilidad {
