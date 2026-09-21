@@ -52,51 +52,42 @@ psql -h localhost -U biblioteca -d biblioteca -f db/migracion-visitas-pdf.sql
 
 Eso agrega el contador empezando en 0 para todos los libros existentes.
 
-Para incorporar varias bibliotecas a una instalación existente, después de
-las migraciones anteriores ejecutá:
+Al iniciar, el servidor aplica `db/migracion-bibliotecas.sql` y crea las
+bibliotecas con los nombres de usuario configurados en `BIBLIN_USERS`.
+No crea una biblioteca de ejemplo. Si una versión anterior creó
+**Biblioteca inicial**, la elimina únicamente cuando está vacía.
+Reiniciar no duplica bibliotecas ni cambia sus libros, préstamos o PDFs.
 
-```bash
-psql -h localhost -U biblioteca -d biblioteca -v ON_ERROR_STOP=1 -f db/migracion-bibliotecas.sql
-```
+Esto admite instalaciones vacías o con libros ya asignados a bibliotecas.
+Si una instalación antigua tiene libros sin biblioteca, hay que asignarlos a
+su escuela antes de completar la migración: el servidor se detiene sin
+reasignarlos automáticamente.
 
-Los libros actuales quedan en **Biblioteca inicial** (ID 1), conservando sus
-préstamos y PDFs. Las instalaciones nuevas ya incluyen esto en `db/schema.sql`.
-La migración se puede volver a ejecutar y no cambia las bibliotecas ya asignadas.
-
-Renombrá la biblioteca inicial y creá las demás con los nombres reales de las
-escuelas. Por ejemplo, desde PostgreSQL:
-
-```sql
-UPDATE bibliotecas SET nombre = 'Escuela San Martín' WHERE id = 1;
-INSERT INTO bibliotecas (nombre) VALUES ('Escuela Belgrano') RETURNING id;
-SELECT id, nombre FROM bibliotecas ORDER BY id;
-```
-
-Usá los IDs obtenidos para configurar las cuentas. Los nombres anteriores son
-ejemplos. Los tejuelos pueden repetirse entre escuelas, pero no dentro de una
-misma biblioteca. La sugerencia del siguiente inventario se calcula por biblioteca.
+Los tejuelos pueden repetirse entre escuelas, pero no dentro de una misma
+biblioteca. La sugerencia del siguiente inventario se calcula por biblioteca.
 
 ## 2. Configurar la aplicación
 
 Las cuentas de gestión no se guardan en PostgreSQL. Se configuran manualmente en el archivo `.env` mediante `BIBLIN_USERS`, usando un objeto JSON, por ejemplo:
 
 ```
-BIBLIN_USERS={"Escuela San Martín":{"clave":"CAMBIAR_CLAVE_1","biblioteca_id":1},"Escuela Belgrano":{"clave":"CAMBIAR_CLAVE_2","biblioteca_id":2}}
+BIBLIN_USERS={"EP31":"CAMBIAR_CLAVE_1","EP42":"CAMBIAR_CLAVE_2"}
 ```
 
-Cada cuenta debe apuntar a una biblioteca existente. Dos cuentas pueden compartir
-una biblioteca si trabajan en la misma escuela. Reiniciá el servidor después de
-cambiar `BIBLIN_USERS`. Las cuentas antiguas con formato `"usuario":"clave"`
-siguen funcionando y pertenecen a la biblioteca inicial (ID 1); asigná los IDs
-explícitamente para separar las escuelas.
+El nombre de usuario **es el nombre de la biblioteca**. No se necesitan IDs ni
+crear escuelas manualmente en la base: cada entrada del JSON crea su biblioteca
+al arrancar, incluso si aún no tiene libros. Reiniciá después de agregar cuentas
+o cambiar contraseñas. Mantené el nombre de usuario para conservar el vínculo:
+un nombre diferente crea otra biblioteca. Quitar una cuenta no borra sus libros
+ni su biblioteca del catálogo público.
 
 El acceso **Solo lector** no requiere cuenta: muestra libros, biblioteca de
 origen, disponibilidad y PDFs de todas las escuelas. No expone datos de las
 personas que pidieron préstamos ni contadores de visitas.
 El desplegable **Biblioteca de la escuela** permite elegir una escuela o
 **Todas las bibliotecas** y combinar esa selección con la búsqueda de libros.
-Usa el nombre público de `bibliotecas.nombre`: configurá el mismo nombre de
-escuela en la biblioteca y en su cuenta. La lista no expone las credenciales.
+Muestra automáticamente los nombres de las bibliotecas, iguales a los usuarios
+configurados. La lista no expone las contraseñas.
 El selector nativo tiene un ancho máximo y el navegador permite desplazarse
 por las opciones cuando hay muchas escuelas, sin alargar la página.
 
@@ -125,8 +116,8 @@ npm install
 npm start
 ```
 
-Por defecto el servidor escucha en el puerto 3000. Para probarlo en la
-misma máquina, abrí `http://localhost:3000` en el navegador.
+El archivo de ejemplo usa `PORT=3010`: abrí `http://localhost:3010` en el
+navegador. Si no configurás `PORT`, el servidor usa 3000.
 
 Las pruebas de aislamiento entre bibliotecas se ejecutan con `npm test`.
 Usan una base PostgreSQL temporal en memoria (PGlite), sin conectar a la base real.

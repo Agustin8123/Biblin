@@ -77,7 +77,7 @@ function actualizarInicio() {
     inicioPublico.classList.add('oculta');
     inicioAdmin.classList.remove('oculta');
     barraSesion.classList.remove('oculta');
-    textoSesion.textContent = `${sesion.biblioteca?.nombre || 'Mi biblioteca'} · ${sesion.usuario}`;
+    textoSesion.textContent = `Biblioteca: ${sesion.biblioteca?.nombre || sesion.usuario}`;
   } else {
     inicioPublico.classList.remove('oculta');
     inicioAdmin.classList.add('oculta');

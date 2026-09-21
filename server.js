@@ -38,7 +38,8 @@ app.use(express.json({ limit: '100kb' }));
 // Autenticación basada en sesiones.
 // Las cuentas viven exclusivamente en .env y NO en PostgreSQL.
 // Ejemplo:
-// BIBLIN_USERS={"admin":{"clave":"clave1","biblioteca_id":1}}
+// BIBLIN_USERS={"EP31":"clave1","EP42":"clave2"}
+// Cada usuario es el nombre público de su biblioteca.
 // ---------------------------------------------------------------------------
 function cargarCuentas() {
   const bruto = String(process.env.BIBLIN_USERS || '').trim();
@@ -52,13 +53,11 @@ function cargarCuentas() {
 
     const resultado = Object.create(null);
     for (const [usuario, valor] of Object.entries(cuentas)) {
-      // Las cuentas antiguas conservan acceso a la biblioteca inicial.
-      const cuenta = typeof valor === 'string' ? { clave: valor, biblioteca_id: 1 } : valor;
-      if (!usuario.trim() || !cuenta || typeof cuenta.clave !== 'string' ||
-          !Number.isSafeInteger(cuenta.biblioteca_id) || cuenta.biblioteca_id <= 0) {
-        throw new Error('Cada cuenta necesita clave y biblioteca_id entero positivo.');
+      if (!usuario.trim() || usuario !== usuario.trim() || usuario.length > 300 ||
+          typeof valor !== 'string' || !valor) {
+        throw new Error('Cada cuenta debe tener el nombre de su biblioteca y una clave no vacía.');
       }
-      resultado[usuario] = { clave: cuenta.clave, biblioteca_id: cuenta.biblioteca_id };
+      resultado[usuario] = { clave: valor };
     }
     return resultado;
   } catch (error) {
@@ -68,6 +67,25 @@ function cargarCuentas() {
 }
 
 const CUENTAS = cargarCuentas();
+
+async function inicializarBibliotecas() {
+  const cliente = await pool.connect();
+  try {
+    // Actualiza instalaciones vacías o ya separadas por biblioteca.
+    await cliente.query(fs.readFileSync(path.join(__dirname, 'db', 'migracion-bibliotecas.sql'), 'utf8'));
+    await cliente.query('BEGIN');
+    for (const nombre of Object.keys(CUENTAS)) {
+      await cliente.query('INSERT INTO bibliotecas (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING', [nombre]);
+    }
+    await cliente.query('COMMIT');
+  } catch (error) {
+    await cliente.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    cliente.release();
+  }
+}
+
 const SESIONES = new Map();
 const DURACION_SESION_MS = 12 * 60 * 60 * 1000;
 const NOMBRE_COOKIE_SESION = 'biblin_session';
@@ -210,7 +228,7 @@ app.post('/api/auth/login', limitadorLogin, async (req, res) => {
 
   let biblioteca;
   try {
-    const resultado = await pool.query('SELECT id, nombre FROM bibliotecas WHERE id = $1', [CUENTAS[usuario].biblioteca_id]);
+    const resultado = await pool.query('SELECT id, nombre FROM bibliotecas WHERE nombre = $1', [usuario]);
     biblioteca = resultado.rows[0];
     if (!biblioteca) return res.status(503).json({ ok: false, error: 'La cuenta no tiene una biblioteca configurada. Contactá al administrador.' });
   } catch (error) {
@@ -839,11 +857,20 @@ app.use('/api/', (req, res) => {
   res.status(404).json({ ok: false, error: 'Esa dirección no existe.' });
 });
 
-if (require.main === module) app.listen(PUERTO, '0.0.0.0', () => {
-  if (Object.keys(CUENTAS).length === 0) {
-    console.warn('ADVERTENCIA: no hay cuentas configuradas en BIBLIN_USERS. Biblin funcionará en modo Solo lector hasta configurarlas.');
-  }
-  console.log(`Biblioteca escuchando en el puerto ${PUERTO}`);
-});
+if (require.main === module) {
+  inicializarBibliotecas().then(() => {
+    app.listen(PUERTO, '0.0.0.0', () => {
+      if (Object.keys(CUENTAS).length === 0) {
+        console.warn('ADVERTENCIA: no hay cuentas configuradas en BIBLIN_USERS. Biblin funcionará en modo Solo lector hasta configurarlas.');
+      }
+      console.log(`Biblioteca escuchando en el puerto ${PUERTO}`);
+    });
+  }).catch(async (error) => {
+    console.error('No se pudieron preparar las bibliotecas:', error.message);
+    await pool.end();
+    process.exitCode = 1;
+  });
+}
 
 module.exports = app;
+module.exports.inicializarBibliotecas = inicializarBibliotecas;

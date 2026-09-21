@@ -64,8 +64,8 @@ CREATE INDEX IF NOT EXISTS idx_libros_inventario  ON libros (numero_inventario);
 
 -- Separación de bibliotecas (también compatible con instalaciones existentes).
 -- Ejecutar después de las migraciones de préstamos y visitas a PDFs.
--- Los libros existentes pasan a la biblioteca inicial, sin cambiar sus IDs,
--- préstamos ni archivos PDF. Se puede volver a ejecutar sin duplicar datos.
+-- Las bibliotecas se crean al iniciar el servidor con los nombres de BIBLIN_USERS.
+-- No crea bibliotecas de ejemplo ni reasigna libros existentes.
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS bibliotecas (
@@ -73,15 +73,14 @@ CREATE TABLE IF NOT EXISTS bibliotecas (
     nombre VARCHAR(300) NOT NULL CHECK (btrim(nombre) <> '')
 );
 
-INSERT INTO bibliotecas (id, nombre) VALUES (1, 'Biblioteca inicial')
-ON CONFLICT (id) DO NOTHING;
-SELECT setval(pg_get_serial_sequence('bibliotecas', 'id'),
-              GREATEST((SELECT MAX(id) FROM bibliotecas),
-                       (SELECT last_value FROM bibliotecas_id_seq)));
-
 ALTER TABLE libros ADD COLUMN IF NOT EXISTS biblioteca_id INTEGER REFERENCES bibliotecas(id);
-UPDATE libros SET biblioteca_id = 1 WHERE biblioteca_id IS NULL;
+-- Si una instalación antigua tiene libros sin biblioteca, detiene la migración
+-- para que se les asigne su escuela explícitamente, sin atribuirlos a otra cuenta.
 ALTER TABLE libros ALTER COLUMN biblioteca_id SET NOT NULL;
+
+DELETE FROM bibliotecas b WHERE b.nombre = 'Biblioteca inicial'
+    AND NOT EXISTS (SELECT 1 FROM libros l WHERE l.biblioteca_id = b.id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bibliotecas_nombre ON bibliotecas (nombre);
 
 -- Cada escuela puede usar sus propios tejuelos, aunque coincidan con otra.
 ALTER TABLE libros DROP CONSTRAINT IF EXISTS numero_tarjeta_unico;

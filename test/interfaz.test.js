@@ -35,7 +35,7 @@ test('la cuenta identifica su biblioteca y puede consultar el catálogo sin acci
     window.eval(leer('public/script.js'));
     const esperar = () => new Promise((resolve) => setImmediate(resolve));
     await esperar();
-    assert.match(window.document.getElementById('texto-sesion').textContent, /Escuela Martín.*mi_cuenta/);
+    assert.equal(window.document.getElementById('texto-sesion').textContent, 'Biblioteca: Escuela Martín');
     window.document.getElementById('btn-catalogo-publico').click();
     await esperar();
     assert.equal(window.document.querySelectorAll('#resultados .ficha-libro').length, 2);

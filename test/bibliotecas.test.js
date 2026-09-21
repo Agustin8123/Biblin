@@ -22,24 +22,28 @@ async function pedir(ruta, cookie, method = 'GET', body) {
 before(async () => {
   db = new PGlite({ extensions: { unaccent } });
   await db.exec(leer('db/schema.sql'));
-  await db.exec("UPDATE bibliotecas SET nombre = 'Escuela Martín' WHERE id = 1; INSERT INTO bibliotecas (nombre) VALUES ('Escuela Belgrano');");
+  assert.equal((await db.query('SELECT * FROM bibliotecas')).rows.length, 0);
   // Ejecutamos las consultas reales de la API en PostgreSQL en memoria.
   // Solo reemplazamos el transporte pg; no se toca DATABASE_URL.
   const pool = {
     async query(sql, params) {
+      if (sql.includes('CREATE TABLE IF NOT EXISTS bibliotecas')) return db.exec(sql);
       const resultado = await db.query(sql, params);
       return { rows: resultado.rows, rowCount: resultado.rows.length || resultado.affectedRows || 0 };
     },
     async connect() { return { query: pool.query, release() {} }; },
   };
   require.cache[require.resolve('../db')] = { exports: pool };
-  process.env.BIBLIN_USERS = JSON.stringify({ a: { clave: 'test-a', biblioteca_id: 1 }, b: { clave: 'test-b', biblioteca_id: 2 }, antigua: 'test-antigua', sinBiblioteca: { clave: 'test', biblioteca_id: 999 } });
+  process.env.BIBLIN_USERS = JSON.stringify({ 'Escuela Martín': 'test-a', 'Escuela Belgrano': 'test-b' });
   const app = require('../server');
+  await app.inicializarBibliotecas();
+  await app.inicializarBibliotecas();
+  assert.equal((await db.query('SELECT * FROM bibliotecas')).rows.length, 2);
   server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${server.address().port}`;
-  cuentaA = (await pedir('/api/auth/login', null, 'POST', { usuario: 'a', clave: 'test-a' })).cookie;
-  cuentaB = (await pedir('/api/auth/login', null, 'POST', { usuario: 'b', clave: 'test-b' })).cookie;
+  cuentaA = (await pedir('/api/auth/login', null, 'POST', { usuario: 'Escuela Martín', clave: 'test-a' })).cookie;
+  cuentaB = (await pedir('/api/auth/login', null, 'POST', { usuario: 'Escuela Belgrano', clave: 'test-b' })).cookie;
 });
 
 after(async () => {
@@ -47,12 +51,12 @@ after(async () => {
   if (db) await db.close();
 });
 
-test('sesiones vinculadas a escuelas y compatibilidad de cuentas antiguas', async () => {
+test('sesiones vinculadas a bibliotecas creadas automáticamente con el nombre del usuario', async () => {
   assert.equal((await pedir('/api/auth/estado', cuentaA)).datos.biblioteca.id, 1);
   assert.equal((await pedir('/api/auth/estado', cuentaB)).datos.biblioteca.nombre, 'Escuela Belgrano');
-  assert.equal((await pedir('/api/auth/login', null, 'POST', { usuario: 'antigua', clave: 'test-antigua' })).datos.biblioteca.id, 1);
-  assert.equal((await pedir('/api/auth/login', null, 'POST', { usuario: 'sinBiblioteca', clave: 'test' })).status, 503);
-  assert.equal((await pedir('/api/auth/login', null, 'POST', { usuario: 'a', clave: 'incorrecta' })).status, 401);
+  assert.equal((await pedir('/api/auth/estado', cuentaA)).datos.usuario, 'Escuela Martín');
+  assert.equal((await pedir('/api/auth/login', null, 'POST', { usuario: 'Escuela Martín', clave: 'incorrecta' })).status, 401);
+  assert.equal((await pedir('/api/auth/login', null, 'POST', { usuario: 'Desconocida', clave: 'test' })).status, 401);
 });
 
 test('cada cuenta crea en su biblioteca y los tejuelos pueden coincidir entre escuelas', async () => {
@@ -153,7 +157,10 @@ test('migración repetible preserva libros, préstamos y PDFs anteriores', async
   try {
     const esquema = leer('db/schema.sql');
     await anterior.exec(esquema.slice(0, esquema.indexOf('-- Separación de bibliotecas')));
-    await anterior.exec("INSERT INTO libros (titulo, autor, numero_tarjeta, pdf_archivo, pdf_visitas) VALUES ('Anterior', 'Autor', 'A-1', 'archivo.pdf', 5);");
+    await anterior.exec(leer('db/migracion-bibliotecas.sql'));
+    assert.equal((await anterior.query('SELECT * FROM bibliotecas')).rows.length, 0);
+    await anterior.exec("INSERT INTO bibliotecas (nombre) VALUES ('EP31');");
+    await anterior.exec("INSERT INTO libros (titulo, autor, numero_tarjeta, pdf_archivo, pdf_visitas, biblioteca_id) VALUES ('Anterior', 'Autor', 'A-1', 'archivo.pdf', 5, 1);");
     await anterior.exec("INSERT INTO prestamos (libro_id, nombre, apellido, fecha_prestamo, fecha_limite) VALUES (1, 'Nombre', 'Apellido', '2026-09-01', '2026-09-08');");
     await anterior.exec(leer('db/migracion-bibliotecas.sql'));
     await anterior.exec(leer('db/migracion-bibliotecas.sql'));
@@ -167,4 +174,18 @@ test('migración repetible preserva libros, préstamos y PDFs anteriores', async
     await anterior.exec(leer('db/schema.sql'));
     assert.equal((await anterior.query('SELECT COUNT(*)::int AS cantidad FROM bibliotecas')).rows[0].cantidad, 2);
   } finally { await anterior.close(); }
+});
+
+test('quita Biblioteca inicial solo cuando está vacía', async () => {
+  const prueba = new PGlite({ extensions: { unaccent } });
+  try {
+    await prueba.exec(leer('db/schema.sql'));
+    await prueba.exec("INSERT INTO bibliotecas (nombre) VALUES ('Biblioteca inicial');");
+    await prueba.exec(leer('db/migracion-bibliotecas.sql'));
+    assert.equal((await prueba.query('SELECT * FROM bibliotecas')).rows.length, 0);
+    await prueba.exec("INSERT INTO bibliotecas (nombre) VALUES ('Biblioteca inicial'); INSERT INTO libros (titulo, autor, numero_tarjeta, biblioteca_id) SELECT 'Libro', 'Autor', '1', id FROM bibliotecas;");
+    await prueba.exec(leer('db/migracion-bibliotecas.sql'));
+    assert.equal((await prueba.query('SELECT * FROM libros')).rows.length, 1);
+    assert.equal((await prueba.query('SELECT * FROM bibliotecas')).rows.length, 1);
+  } finally { await prueba.close(); }
 });
