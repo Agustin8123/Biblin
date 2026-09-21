@@ -13,7 +13,7 @@ ALTER TABLE libros ADD COLUMN IF NOT EXISTS biblioteca_id INTEGER REFERENCES bib
 -- para que se les asigne su escuela explícitamente, sin atribuirlos a otra cuenta.
 ALTER TABLE libros ALTER COLUMN biblioteca_id SET NOT NULL;
 
-DELETE FROM bibliotecas b WHERE b.nombre = 'Biblioteca inicial'
+DELETE FROM bibliotecas b WHERE lower(btrim(b.nombre)) = 'biblioteca inicial'
     AND NOT EXISTS (SELECT 1 FROM libros l WHERE l.biblioteca_id = b.id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_bibliotecas_nombre ON bibliotecas (nombre);
 

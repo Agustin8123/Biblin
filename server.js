@@ -428,7 +428,11 @@ app.post('/api/libros', exigirLogin, async (req, res) => {
 app.get('/api/bibliotecas', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   try {
-    const resultado = await pool.query('SELECT id, nombre FROM bibliotecas ORDER BY nombre ASC, id ASC');
+    const resultado = await pool.query(
+      `SELECT id, nombre FROM bibliotecas
+       WHERE lower(btrim(nombre)) <> 'biblioteca inicial'
+       ORDER BY nombre ASC, id ASC`
+    );
     res.json({ ok: true, bibliotecas: resultado.rows });
   } catch (error) {
     console.error('Error al listar bibliotecas:', error);
@@ -465,6 +469,7 @@ app.get('/api/libros/buscar', async (req, res) => {
        FROM libros l
        JOIN bibliotecas b ON b.id = l.biblioteca_id
        WHERE ($2::integer IS NULL OR l.biblioteca_id = $2)
+         AND lower(btrim(b.nombre)) <> 'biblioteca inicial'
          AND ($4::integer IS NULL OR l.biblioteca_id = $4)
          AND ($1 = '' OR unaccent(l.titulo) ILIKE unaccent($3)
            OR unaccent(l.autor) ILIKE unaccent($3)
