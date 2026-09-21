@@ -363,7 +363,7 @@ app.get('/api/libros/buscar', async (req, res) => {
             OR unaccent(COALESCE(editorial, '')) ILIKE unaccent($1)
             OR unaccent(COALESCE(tema, '')) ILIKE unaccent($1)
             OR unaccent(numero_tarjeta) ILIKE unaccent($1)
-            OR unaccent(COALESCE(numero_inventario, '')) ILIKE unaccent($1)
+            OR unaccent(COALESCE(numero_inventario::text, '')) ILIKE unaccent($1)
          ORDER BY titulo ASC
          LIMIT 200`,
         [`%${q}%`]
@@ -381,6 +381,60 @@ app.get('/api/libros/buscar', async (req, res) => {
   } catch (error) {
     console.error('Error al buscar libros:', error);
     res.status(500).json({ ok: false, error: 'No se pudo hacer la búsqueda. Probá de nuevo en un momento.' });
+  }
+});
+
+// Edita un libro ya existente (para corregir errores de tipeo).
+app.put('/api/libros/:id', exigirLogin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ ok: false, error: 'Ese libro no existe.' });
+  }
+
+  const validacion = validarLibro(req.body || {});
+  if (validacion.error) {
+    return res.status(400).json({ ok: false, error: validacion.error });
+  }
+
+  const {
+    titulo,
+    autor,
+    editorial,
+    tema,
+    numero_tarjeta,
+    numero_inventario,
+  } = validacion.datos;
+
+  try {
+    const resultado = await pool.query(
+      `UPDATE libros
+       SET titulo = $1, autor = $2, editorial = $3, tema = $4,
+           numero_tarjeta = $5, numero_inventario = $6
+       WHERE id = $7
+       RETURNING id, titulo, autor, editorial, tema, numero_tarjeta, numero_inventario,
+                 creado_en, (pdf_archivo IS NOT NULL) AS tiene_pdf`,
+      [titulo, autor, editorial, tema, numero_tarjeta, numero_inventario, id]
+    );
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Ese libro ya no está en la lista.' });
+    }
+    res.json({ ok: true, libro: resultado.rows[0] });
+  } catch (error) {
+    if (error.code === '23505') {
+      const detalle = String(error.detail || '');
+      if (detalle.includes('numero_inventario')) {
+        return res.status(409).json({
+          ok: false,
+          error: `Ya hay otro libro guardado con el número de inventario "${numero_inventario}". Probá con otro número.`,
+        });
+      }
+      return res.status(409).json({
+        ok: false,
+        error: `Ya hay otro libro guardado con el tejuelo "${numero_tarjeta}". Probá con otro tejuelo.`,
+      });
+    }
+    console.error('Error al editar el libro:', error);
+    res.status(500).json({ ok: false, error: 'No se pudo guardar el cambio. Probá de nuevo en un momento.' });
   }
 });
 

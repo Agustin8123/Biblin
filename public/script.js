@@ -3,6 +3,7 @@ const ICONO_ERROR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const ICONO_BASURA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>';
 const ICONO_DOCUMENTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/></svg>';
 const ICONO_SUBIR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>';
+const ICONO_LAPIZ = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 
 const pantallas = {
   inicio: document.getElementById('pantalla-inicio'),
@@ -17,6 +18,7 @@ let sesion = {
 };
 
 let modoLector = true;
+let libroEditandoId = null;
 
 function mostrarPantalla(nombre) {
   Object.values(pantallas).forEach((p) => p.classList.add('oculta'));
@@ -104,6 +106,10 @@ document.getElementById('btn-ir-agregar').addEventListener('click', () => {
     return;
   }
   modoLector = false;
+  libroEditandoId = null;
+  document.querySelector('#pantalla-agregar h2').textContent = 'Agregar un libro';
+  botonGuardar.textContent = 'Guardar libro';
+  document.querySelector('#pantalla-agregar [data-volver]').dataset.volver = 'inicio';
   mostrarPantalla('agregar');
   prepararFormularioAgregar();
 });
@@ -114,8 +120,10 @@ document.getElementById('btn-cerrar-sesion').addEventListener('click', cerrarSes
 
 document.querySelectorAll('[data-volver]').forEach((boton) => {
   boton.addEventListener('click', () => {
-    mostrarPantalla(boton.dataset.volver || 'inicio');
-    if ((boton.dataset.volver || 'inicio') === 'inicio') actualizarInicio();
+    const destino = boton.dataset.volver || 'inicio';
+    mostrarPantalla(destino);
+    if (destino === 'inicio') actualizarInicio();
+    if (destino === 'buscar') buscarLibros(campoBusqueda.value.trim());
   });
 });
 
@@ -192,6 +200,28 @@ campoPdf.addEventListener('change', () => {
   nombrePdfElegido.textContent = campoPdf.files[0] ? campoPdf.files[0].name : 'Elegir archivo PDF';
 });
 
+function abrirEdicion(libro) {
+  if (!sesion.autenticado || modoLector) return;
+
+  libroEditandoId = libro.id;
+  document.querySelector('#pantalla-agregar h2').textContent = 'Editar libro';
+  botonGuardar.textContent = 'Guardar cambios';
+  document.querySelector('#pantalla-agregar [data-volver]').dataset.volver = 'buscar';
+
+  mostrarPantalla('agregar');
+  ocultarMensaje(mensajeAgregar);
+  nombrePdfElegido.textContent = 'Elegir archivo PDF';
+  campoPdf.value = '';
+
+  campoTitulo.value = libro.titulo;
+  campoAutor.value = libro.autor;
+  campoEditorial.value = libro.editorial || '';
+  campoTema.value = libro.tema || '';
+  campoTejuelo.value = libro.numero_tarjeta;
+  campoInventario.value = libro.numero_inventario || '';
+  campoTitulo.focus();
+}
+
 async function prepararFormularioAgregar() {
   formAgregar.reset();
   nombrePdfElegido.textContent = 'Elegir archivo PDF';
@@ -220,13 +250,16 @@ formAgregar.addEventListener('submit', async (evento) => {
     numero_inventario: campoInventario.value,
   };
   const archivoPdf = campoPdf.files[0] || null;
+  const editando = libroEditandoId !== null;
 
   botonGuardar.disabled = true;
-  botonGuardar.textContent = 'Guardando…';
+  botonGuardar.textContent = editando ? 'Guardando cambios…' : 'Guardando…';
 
   try {
-    const respuesta = await fetch('/api/libros', {
-      method: 'POST',
+    const url = editando ? `/api/libros/${libroEditandoId}` : '/api/libros';
+    const metodo = editando ? 'PUT' : 'POST';
+    const respuesta = await fetch(url, {
+      method: metodo,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cuerpo),
     });
@@ -241,11 +274,11 @@ formAgregar.addEventListener('submit', async (evento) => {
     }
 
     if (!datos.ok) {
-      mostrarMensaje(mensajeAgregar, 'error', datos.error || 'No se pudo guardar el libro.');
+      mostrarMensaje(mensajeAgregar, 'error', datos.error || 'No se pudo guardar.');
       return;
     }
 
-    let mensajeFinal = 'Guardado. Ya podés agregar otro libro.';
+    let mensajeFinal = editando ? 'Los cambios se guardaron.' : 'Guardado. Ya podés agregar otro libro.';
 
     if (archivoPdf) {
       botonGuardar.textContent = 'Subiendo PDF…';
@@ -260,22 +293,26 @@ formAgregar.addEventListener('submit', async (evento) => {
         if (respuestaPdf.status === 401) {
           sesion = { autenticado: false, usuario: null };
           actualizarInicio();
-          mensajeFinal = 'El libro se guardó, pero la sesión terminó antes de subir el PDF.';
+          mensajeFinal += ' La sesión terminó antes de subir el PDF.';
         } else if (!datosPdf.ok) {
-          mensajeFinal = `El libro se guardó, pero el PDF no se pudo subir (${datosPdf.error}). Podés subirlo después desde "Buscar un libro".`;
+          mensajeFinal += ` El PDF no se pudo subir (${datosPdf.error}).`;
         }
       } catch (error) {
-        mensajeFinal = 'El libro se guardó, pero el PDF no se pudo subir por un problema de conexión. Podés subirlo después desde "Buscar un libro".';
+        mensajeFinal += ' El PDF no se pudo subir por un problema de conexión.';
       }
     }
 
-    await prepararFormularioAgregar();
-    mostrarMensaje(mensajeAgregar, 'exito', mensajeFinal);
+    if (editando) {
+      mostrarMensaje(mensajeAgregar, 'exito', mensajeFinal);
+    } else {
+      await prepararFormularioAgregar();
+      mostrarMensaje(mensajeAgregar, 'exito', mensajeFinal);
+    }
   } catch (error) {
     mostrarMensaje(mensajeAgregar, 'error', 'No hay conexión con el servidor. Revisá internet e intentá de nuevo.');
   } finally {
     botonGuardar.disabled = false;
-    botonGuardar.textContent = 'Guardar libro';
+    botonGuardar.textContent = editando ? 'Guardar cambios' : 'Guardar libro';
   }
 });
 
@@ -376,12 +413,24 @@ function crearFichaLibro(libro) {
   filaAcciones.appendChild(zonaPdf);
 
   if (sesion.autenticado && !modoLector) {
+    const zonaGestion = document.createElement('div');
+    zonaGestion.className = 'zona-gestion';
+
+    const botonEditar = document.createElement('button');
+    botonEditar.type = 'button';
+    botonEditar.className = 'boton-editar';
+    botonEditar.innerHTML = `${ICONO_LAPIZ}<span>Editar</span>`;
+    botonEditar.addEventListener('click', () => abrirEdicion(libro));
+    zonaGestion.appendChild(botonEditar);
+
     const botonBorrar = document.createElement('button');
     botonBorrar.type = 'button';
     botonBorrar.className = 'boton-borrar';
     botonBorrar.innerHTML = `${ICONO_BASURA}<span>Borrar</span>`;
     botonBorrar.addEventListener('click', () => borrarLibro(libro.id, libro.titulo));
-    filaAcciones.appendChild(botonBorrar);
+    zonaGestion.appendChild(botonBorrar);
+
+    filaAcciones.appendChild(zonaGestion);
   }
 
   ficha.appendChild(filaAcciones);

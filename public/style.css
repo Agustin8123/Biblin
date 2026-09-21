@@ -335,6 +335,30 @@ main {
   height: 15px;
 }
 
+.zona-gestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.boton-editar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1.5px solid var(--azul);
+  color: var(--azul);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 9px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.boton-editar:hover { background: rgba(44, 74, 107, 0.08); }
+.boton-editar svg {
+  width: 15px;
+  height: 15px;
+}
+
 .fila-acciones {
   margin-top: 14px;
   display: flex;
