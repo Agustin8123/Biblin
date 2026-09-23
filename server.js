@@ -634,8 +634,11 @@ app.post('/api/prestamos/:id/devolver', exigirLogin, async (req, res) => {
 
   try {
     const actual = await pool.query(
-      'SELECT fecha_prestamo, fecha_devolucion FROM prestamos WHERE id = $1',
-      [id]
+      `SELECT fecha_devolucion,
+              ($2::date < fecha_prestamo) AS devolucion_anterior
+       FROM prestamos
+       WHERE id = $1`,
+      [id, fechaDevolucion]
     );
     if (actual.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Ese préstamo ya no existe.' });
@@ -643,7 +646,9 @@ app.post('/api/prestamos/:id/devolver', exigirLogin, async (req, res) => {
     if (actual.rows[0].fecha_devolucion) {
       return res.status(409).json({ ok: false, error: 'Ese libro ya figura como devuelto.' });
     }
-    if (fechaDevolucion < String(actual.rows[0].fecha_prestamo).slice(0, 10)) {
+    // La comparación se hace en PostgreSQL como DATE contra DATE. Evita que
+    // zonas horarias o la representación de Date de Node cambien el día.
+    if (actual.rows[0].devolucion_anterior) {
       return res.status(400).json({ ok: false, error: 'La devolución no puede ser anterior al préstamo.' });
     }
 
