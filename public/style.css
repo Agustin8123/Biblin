@@ -365,7 +365,15 @@ main {
   margin-top: 14px;
   display: flex;
   align-items: center;
+<<<<<<< HEAD
   justify-content: flex-start;
+=======
+<<<<<<< HEAD
+  justify-content: center;
+=======
+  justify-content: flex-start;
+>>>>>>> e0d2c613de4990c54558a2cc633a747c565edc2e
+>>>>>>> 0715a522b7707a896e1124e0cf4459d613f994b3
   gap: 7px;
   flex-wrap: wrap;
 }
