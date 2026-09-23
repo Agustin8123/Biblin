@@ -261,7 +261,8 @@ main {
   flex-direction: column;
   gap: 12px;
 }
-#campo-busqueda {
+#campo-busqueda,
+#campo-busqueda-prestamo {
   width: 100%;
   font-size: 21px;
   padding: 16px;
@@ -270,7 +271,8 @@ main {
   background: var(--superficie);
   color: var(--tinta);
 }
-#campo-busqueda:focus {
+#campo-busqueda:focus,
+#campo-busqueda-prestamo:focus {
   border-color: var(--azul);
   outline: none;
 }
@@ -325,7 +327,7 @@ main {
   color: var(--error);
   font-size: 15px;
   font-weight: 700;
-  padding: 9px 14px;
+  padding: 9px 11px;
   border-radius: 8px;
   cursor: pointer;
 }
@@ -338,7 +340,7 @@ main {
 .zona-gestion {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
 }
 .boton-editar {
   display: inline-flex;
@@ -349,7 +351,7 @@ main {
   color: var(--azul);
   font-size: 15px;
   font-weight: 700;
-  padding: 9px 14px;
+  padding: 9px 11px;
   border-radius: 8px;
   cursor: pointer;
 }
@@ -363,14 +365,14 @@ main {
   margin-top: 14px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 7px;
   flex-wrap: wrap;
 }
 .zona-pdf {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 7px;
   flex-wrap: wrap;
 }
 .boton-pdf {
@@ -380,7 +382,7 @@ main {
   border: none;
   font-size: 15px;
   font-weight: 700;
-  padding: 9px 14px;
+  padding: 9px 11px;
   border-radius: 8px;
   cursor: pointer;
   text-decoration: none;
@@ -538,7 +540,7 @@ main {
 }
 
 .boton-imprimir-libro {
-  padding: 9px 14px;
+  padding: 9px 11px;
   background: none;
   border: 1.5px solid var(--verde);
   color: var(--verde);
@@ -751,7 +753,7 @@ main {
 }
 
 .boton-prestar-libro {
-  padding: 9px 14px;
+  padding: 9px 11px;
   background: #8A5A2B;
   border: 1.5px solid #8A5A2B;
   color: #fff;
