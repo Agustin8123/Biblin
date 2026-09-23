@@ -365,7 +365,7 @@ main {
   margin-top: 14px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 7px;
   flex-wrap: wrap;
 }
@@ -701,7 +701,7 @@ main {
 
   .zona-gestion {
     width: 100%;
-    justify-content: center;
+    justify-content: flex-end;
   }
 }
 
@@ -989,7 +989,7 @@ main {
 
 .zona-gestion {
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 @media (max-width: 600px) {
